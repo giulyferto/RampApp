@@ -1,3 +1,13 @@
+Instalar 
+`nvm install`
+`nvm use`
+Cuando setees el proyecto correr antes 
+`npm install`
+
+# Levantar el proyecto en desarrollo
+`npm run dev`
+
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
