@@ -12,7 +12,7 @@ const MapboxMap = () => {
       mapRef.current = new mapboxgl.Map({
         container: mapContainerRef.current as HTMLElement,
         center: [-64.19218, -31.41138],
-        zoom: 11.63,
+        zoom: 13,
       });
     }
 
