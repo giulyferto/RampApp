@@ -1,4 +1,4 @@
-import { collection, addDoc, Timestamp, getDocs, query, orderBy } from 'firebase/firestore';
+import { collection, addDoc, Timestamp, getDocs, query, orderBy, where, deleteDoc, doc, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from './config';
 import { getCurrentUser } from './auth';
@@ -107,6 +107,166 @@ export const getPoints = async (): Promise<(PointData & { id: string })[]> => {
     }));
   } catch {
     throw new Error('Error al obtener los puntos');
+  }
+};
+
+export interface SavedPoint {
+  userId: string;
+  pointId: string;
+  savedAt: Timestamp;
+}
+
+// Verificar si un punto está guardado por el usuario actual
+export const isPointSaved = async (pointId: string): Promise<boolean> => {
+  const user = getCurrentUser();
+  
+  if (!user) {
+    return false;
+  }
+
+  try {
+    const q = query(
+      collection(db, 'puntosGuardados'),
+      where('userId', '==', user.uid),
+      where('pointId', '==', pointId)
+    );
+    const querySnapshot = await getDocs(q);
+    return !querySnapshot.empty;
+  } catch {
+    return false;
+  }
+};
+
+// Obtener el ID del documento guardado (para poder eliminarlo después)
+export const getSavedPointDocId = async (pointId: string): Promise<string | null> => {
+  const user = getCurrentUser();
+  
+  if (!user) {
+    return null;
+  }
+
+  try {
+    const q = query(
+      collection(db, 'puntosGuardados'),
+      where('userId', '==', user.uid),
+      where('pointId', '==', pointId)
+    );
+    const querySnapshot = await getDocs(q);
+    if (!querySnapshot.empty) {
+      return querySnapshot.docs[0].id;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+// Guardar un punto en la colección puntosGuardados
+export const savePointToFavorites = async (pointId: string): Promise<void> => {
+  const user = getCurrentUser();
+  
+  if (!user) {
+    throw new Error('Usuario no autenticado');
+  }
+
+  // Verificar si ya está guardado
+  const alreadySaved = await isPointSaved(pointId);
+  if (alreadySaved) {
+    return; // Ya está guardado, no hacer nada
+  }
+
+  try {
+    const savedPointData: SavedPoint = {
+      userId: user.uid,
+      pointId: pointId,
+      savedAt: Timestamp.now(),
+    };
+    await addDoc(collection(db, 'puntosGuardados'), savedPointData);
+  } catch {
+    throw new Error('Error al guardar el punto en favoritos');
+  }
+};
+
+// Eliminar un punto de la colección puntosGuardados
+export const removePointFromFavorites = async (pointId: string): Promise<void> => {
+  const user = getCurrentUser();
+  
+  if (!user) {
+    throw new Error('Usuario no autenticado');
+  }
+
+  try {
+    const docId = await getSavedPointDocId(pointId);
+    if (docId) {
+      await deleteDoc(doc(db, 'puntosGuardados', docId));
+    } else {
+      // Si no se encuentra el documento, verificar si realmente no existe
+      const isSaved = await isPointSaved(pointId);
+      if (isSaved) {
+        throw new Error('No se pudo encontrar el documento para eliminar');
+      }
+      // Si no está guardado, no hay nada que eliminar, simplemente retornar
+      return;
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('No se pudo encontrar')) {
+      throw error;
+    }
+    throw new Error('Error al eliminar el punto de favoritos');
+  }
+};
+
+// Obtener todos los puntos guardados del usuario actual
+export const getSavedPoints = async (): Promise<(PointData & { id: string })[]> => {
+  const user = getCurrentUser();
+  
+  if (!user) {
+    throw new Error('Usuario no autenticado');
+  }
+
+  try {
+    // Obtener todos los puntos guardados del usuario
+    const q = query(
+      collection(db, 'puntosGuardados'),
+      where('userId', '==', user.uid)
+    );
+    const savedPointsSnapshot = await getDocs(q);
+    
+    if (savedPointsSnapshot.empty) {
+      return [];
+    }
+
+    // Obtener los IDs de los puntos guardados
+    const pointIds = savedPointsSnapshot.docs.map(doc => doc.data().pointId);
+    
+    // Obtener los datos completos de cada punto desde la colección 'punto'
+    const pointsPromises = pointIds.map(async (pointId) => {
+      try {
+        const pointDoc = await getDoc(doc(db, 'punto', pointId));
+        if (pointDoc.exists()) {
+          return {
+            id: pointDoc.id,
+            ...(pointDoc.data() as PointData),
+          };
+        }
+        return null;
+      } catch {
+        return null;
+      }
+    });
+
+    const points = await Promise.all(pointsPromises);
+    
+    // Filtrar los nulls (puntos que ya no existen) y ordenar por fecha de creación
+    return points
+      .filter((point): point is PointData & { id: string } => point !== null)
+      .sort((a, b) => {
+        const aTime = a.createdAt?.toMillis() || 0;
+        const bTime = b.createdAt?.toMillis() || 0;
+        return bTime - aTime; // Más recientes primero
+      });
+  } catch {
+    throw new Error('Error al obtener los puntos guardados');
   }
 };
 
