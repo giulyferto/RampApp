@@ -1,16 +1,19 @@
 import { useState } from 'react'
-import MapboxMap, { type Point } from './MapboxMap'
+import MapboxMap from './MapboxMap'
 import NavBar from './NavBar'
 import PointForm from './PointForm'
 import PointsList from './PointsList'
 import { getSavedPoints, getMyPoints } from '../firebase/points'
 import { Bookmark as BookmarkIcon, Person as PersonIcon } from '@mui/icons-material'
+import type { Point } from '../types'
 import './Home.css'
 
 const Home = () => {
   const [selectedPoint, setSelectedPoint] = useState<Point | null>(null)
   const [showOnlySavedPoints, setShowOnlySavedPoints] = useState(false)
   const [showOnlyMyPoints, setShowOnlyMyPoints] = useState(false)
+  const [savedPointsRefreshKey, setSavedPointsRefreshKey] = useState(0)
+  const [mapRefreshKey, setMapRefreshKey] = useState(0)
 
   const handlePointAdded = (point: Point) => {
     setSelectedPoint(point)
@@ -41,19 +44,44 @@ const Home = () => {
     }
   }
 
+  const handleCloseForm = () => {
+    setSelectedPoint(null)
+  }
+
+  const handleFavoriteChanged = () => {
+    // Refrescar el listado de puntos guardados cuando se quita un favorito
+    if (showOnlySavedPoints) {
+      setSavedPointsRefreshKey(prev => prev + 1)
+    }
+  }
+
+  const handlePointSaved = () => {
+    // Cuando se guarda un punto nuevo, eliminar el punto temporal del mapa
+    // y forzar refresh del mapa para mostrar el punto guardado
+    if (selectedPoint) {
+      // Eliminar el punto temporal del mapa (tiene ID temporal)
+      handleRemovePoint(selectedPoint.id)
+      // Forzar refresh del mapa para que cargue el punto guardado
+      setMapRefreshKey(prev => prev + 1)
+    }
+  }
+
   const handleShowSavedPoints = () => {
     setShowOnlySavedPoints(true)
     setShowOnlyMyPoints(false)
+    setSelectedPoint(null) // Cerrar el formulario si está abierto
   }
 
   const handleShowMyPoints = () => {
     setShowOnlyMyPoints(true)
     setShowOnlySavedPoints(false)
+    setSelectedPoint(null) // Cerrar el formulario si está abierto
   }
 
   const handleShowAllPoints = () => {
     setShowOnlySavedPoints(false)
     setShowOnlyMyPoints(false)
+    setSelectedPoint(null) // Cerrar el formulario si está abierto
   }
 
   return (
@@ -72,6 +100,8 @@ const Home = () => {
           isFormOpen={!!selectedPoint}
           showOnlySavedPoints={showOnlySavedPoints}
           showOnlyMyPoints={showOnlyMyPoints}
+          savedPointsRefreshKey={savedPointsRefreshKey}
+          mapRefreshKey={mapRefreshKey}
         />
         {showOnlySavedPoints && (
           <PointsList
@@ -82,6 +112,7 @@ const Home = () => {
             icon={<BookmarkIcon sx={{ color: '#3b82f6', fontSize: '24px' }} />}
             emptyMessage="No tienes puntos guardados aún"
             tooltipTitle="Mostrar puntos guardados"
+            refreshKey={savedPointsRefreshKey}
           />
         )}
         {showOnlyMyPoints && (
@@ -99,6 +130,9 @@ const Home = () => {
           <PointForm 
             point={selectedPoint} 
             onConfirmDelete={handleConfirmDelete}
+            onClose={handleCloseForm}
+            onFavoriteChanged={handleFavoriteChanged}
+            onPointSaved={handlePointSaved}
           />
         )}
       </div>

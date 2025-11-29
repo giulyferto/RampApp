@@ -2,18 +2,7 @@ import { collection, addDoc, Timestamp, getDocs, query, orderBy, where, deleteDo
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from './config';
 import { getCurrentUser } from './auth';
-
-export interface PointData {
-  lat: number;
-  lng: number;
-  category: string;
-  status: string; // Estado del punto (BUENO, REGULAR, MALO)
-  comments?: string;
-  imageUrl?: string;
-  userId: string;
-  pointStatus: string; // Estado del documento (PENDIENTE, etc.)
-  createdAt: Timestamp;
-}
+import type { PointData, SavedPoint, PointWithId } from '../types';
 
 export const savePoint = async (
   point: { lat: number; lng: number },
@@ -96,7 +85,7 @@ export const savePoint = async (
   }
 };
 
-export const getPoints = async (): Promise<(PointData & { id: string })[]> => {
+export const getPoints = async (): Promise<PointWithId[]> => {
   try {
     const q = query(collection(db, 'punto'), orderBy('createdAt', 'desc'));
     const querySnapshot = await getDocs(q);
@@ -110,11 +99,6 @@ export const getPoints = async (): Promise<(PointData & { id: string })[]> => {
   }
 };
 
-export interface SavedPoint {
-  userId: string;
-  pointId: string;
-  savedAt: Timestamp;
-}
 
 // Verificar si un punto está guardado por el usuario actual
 export const isPointSaved = async (pointId: string): Promise<boolean> => {
@@ -217,7 +201,7 @@ export const removePointFromFavorites = async (pointId: string): Promise<void> =
 };
 
 // Obtener todos los puntos guardados del usuario actual
-export const getSavedPoints = async (): Promise<(PointData & { id: string })[]> => {
+export const getSavedPoints = async (): Promise<PointWithId[]> => {
   const user = getCurrentUser();
   
   if (!user) {
@@ -259,7 +243,7 @@ export const getSavedPoints = async (): Promise<(PointData & { id: string })[]> 
     
     // Filtrar los nulls (puntos que ya no existen) y ordenar por fecha de creación
     return points
-      .filter((point): point is PointData & { id: string } => point !== null)
+      .filter((point): point is PointWithId => point !== null)
       .sort((a, b) => {
         const aTime = a.createdAt?.toMillis() || 0;
         const bTime = b.createdAt?.toMillis() || 0;
@@ -271,7 +255,7 @@ export const getSavedPoints = async (): Promise<(PointData & { id: string })[]> 
 };
 
 // Obtener todos los puntos creados por el usuario actual
-export const getMyPoints = async (): Promise<(PointData & { id: string })[]> => {
+export const getMyPoints = async (): Promise<PointWithId[]> => {
   const user = getCurrentUser();
   
   if (!user) {

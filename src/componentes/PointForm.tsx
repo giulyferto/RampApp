@@ -1,20 +1,50 @@
 import { useState, useRef, useEffect } from "react";
-import { Card, CardContent, CardHeader, IconButton, Box, Typography, FormControl, InputLabel, Select, MenuItem, TextField, Button, Alert, CircularProgress, Snackbar } from "@mui/material";
-import { Close as CloseIcon, CloudUpload as CloudUploadIcon, Delete as DeleteIcon, Save as SaveIcon } from "@mui/icons-material";
-import type { Point } from "./MapboxMap";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  IconButton,
+  Box,
+  Typography,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  TextField,
+  Button,
+  Alert,
+  CircularProgress,
+  Snackbar,
+} from "@mui/material";
+import {
+  Close as CloseIcon,
+  CloudUpload as CloudUploadIcon,
+  Delete as DeleteIcon,
+  Save as SaveIcon,
+} from "@mui/icons-material";
 import CancelDialog from "./CancelDialog";
-import { savePoint, isPointSaved, savePointToFavorites, removePointFromFavorites } from "../firebase/points";
+import {
+  savePoint,
+  isPointSaved,
+  savePointToFavorites,
+  removePointFromFavorites,
+} from "../firebase/points";
 import { getCurrentUser } from "../firebase/auth";
+import type { PointFormProps } from "../types";
+import { CATEGORY_OPTIONS, STATUS_OPTIONS } from "../constants/points";
 
-interface PointFormProps {
-  point: Point;
-  onConfirmDelete: () => void;
-}
-
-const PointForm = ({ point, onConfirmDelete }: PointFormProps) => {
+const PointForm = ({
+  point,
+  onConfirmDelete,
+  onClose,
+  onFavoriteChanged,
+  onPointSaved,
+}: PointFormProps) => {
   const [openDialog, setOpenDialog] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(point.imageUrl || null);
+  const [imagePreview, setImagePreview] = useState<string | null>(
+    point.imageUrl || null
+  );
   const [isDragging, setIsDragging] = useState(false);
   const [category, setCategory] = useState<string>(point.category || "");
   const [status, setStatus] = useState<string>(point.status || "");
@@ -26,13 +56,22 @@ const PointForm = ({ point, onConfirmDelete }: PointFormProps) => {
   const [isCheckingFavorite, setIsCheckingFavorite] = useState(false);
   const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   // Determinar si el punto ya está guardado (tiene pointStatus)
   const isSavedPoint = !!point.pointStatus;
-  
+
   // Verificar si el usuario está logueado
   const user = getCurrentUser();
-  
+
+  // Actualizar los estados cuando cambia el punto
+  useEffect(() => {
+    setImagePreview(point.imageUrl || null);
+    setCategory(point.category || "");
+    setStatus(point.status || "");
+    setComments(point.comments || "");
+    setImageFile(null); // Resetear el archivo de imagen cuando cambia el punto
+  }, [point.id, point.imageUrl, point.category, point.status, point.comments]);
+
   // Verificar si el punto está guardado en favoritos cuando está en modo read-only
   useEffect(() => {
     const checkFavoriteStatus = async () => {
@@ -48,31 +87,19 @@ const PointForm = ({ point, onConfirmDelete }: PointFormProps) => {
         }
       }
     };
-    
+
     checkFavoriteStatus();
   }, [isSavedPoint, user, point.id]);
 
-  const categories = [
-    { value: "RAMPA", label: "Rampa" },
-    { value: "BANO", label: "Baño" },
-    { value: "ASCENSOR", label: "Ascensor" },
-    { value: "ESTACIONAMIENTO", label: "Estacionamiento" },
-    { value: "SENALIZACION", label: "Señalización" },
-    { value: "PUERTA", label: "Puerta" },
-    { value: "TRANSPORTE", label: "Transporte" },
-    { value: "OTRO", label: "Otro" },
-  ];
-
-  const statusOptions = [
-    { value: "BUENO", label: "Bueno", color: "#4caf50" },
-    { value: "REGULAR", label: "Regular", color: "#ff9800" },
-    { value: "MALO", label: "Malo", color: "#f44336" },
-  ];
+  const categories = CATEGORY_OPTIONS;
+  const statusOptions = STATUS_OPTIONS;
 
   const handleCloseClick = () => {
-    // Si el punto ya está guardado, cerrar directamente sin diálogo
+    // Si el punto ya está guardado, cerrar directamente sin eliminar
     if (isSavedPoint) {
-      onConfirmDelete();
+      if (onClose) {
+        onClose();
+      }
     } else {
       // Si es un punto nuevo, mostrar el diálogo de confirmación
       setOpenDialog(true);
@@ -121,17 +148,26 @@ const PointForm = ({ point, onConfirmDelete }: PointFormProps) => {
         comments,
         imageFile
       );
-      
+
       // Mostrar mensaje de éxito
       setShowSuccessSnackbar(true);
-      
+
+      // Notificar que se guardó el punto
+      if (onPointSaved) {
+        onPointSaved();
+      }
+
       // Cerrar el formulario después de 2 segundos
       setTimeout(() => {
-        onConfirmDelete();
+        if (onClose) {
+          onClose();
+        }
       }, 2000);
     } catch (error) {
       console.error("Error al guardar:", error);
-      setSaveError(error instanceof Error ? error.message : "Error al guardar el punto");
+      setSaveError(
+        error instanceof Error ? error.message : "Error al guardar el punto"
+      );
     } finally {
       setIsSaving(false);
     }
@@ -183,13 +219,19 @@ const PointForm = ({ point, onConfirmDelete }: PointFormProps) => {
       if (isFavorite) {
         await removePointFromFavorites(point.id);
         setIsFavorite(false);
+        // Notificar que se quitó de favoritos
+        if (onFavoriteChanged) {
+          onFavoriteChanged();
+        }
       } else {
         await savePointToFavorites(point.id);
         setIsFavorite(true);
       }
     } catch (error) {
       console.error("Error al cambiar favorito:", error);
-      setSaveError(error instanceof Error ? error.message : "Error al cambiar favorito");
+      setSaveError(
+        error instanceof Error ? error.message : "Error al cambiar favorito"
+      );
     } finally {
       setIsTogglingFavorite(false);
     }
@@ -230,7 +272,9 @@ const PointForm = ({ point, onConfirmDelete }: PointFormProps) => {
                       color: isFavorite ? "#ff6b6b" : "#9ca3af",
                     },
                   }}
-                  aria-label={isFavorite ? "Quitar de favoritos" : "Agregar a favoritos"}
+                  aria-label={
+                    isFavorite ? "Quitar de favoritos" : "Agregar a favoritos"
+                  }
                 >
                   <Typography
                     component="span"
@@ -259,15 +303,25 @@ const PointForm = ({ point, onConfirmDelete }: PointFormProps) => {
         />
         <CardContent sx={{ p: 2, maxHeight: "70vh", overflowY: "auto" }}>
           <Box sx={{ mb: 1.5 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 0.5, fontSize: "0.875rem" }}>
+            <Typography
+              variant="subtitle2"
+              sx={{ fontWeight: "bold", mb: 0.5, fontSize: "0.875rem" }}
+            >
               Coordenadas:
             </Typography>
-            <Typography variant="body2" sx={{ fontSize: "0.8rem" }}>Latitud: {point.lat.toFixed(6)}</Typography>
-            <Typography variant="body2" sx={{ fontSize: "0.8rem" }}>Longitud: {point.lng.toFixed(6)}</Typography>
+            <Typography variant="body2" sx={{ fontSize: "0.8rem" }}>
+              Latitud: {point.lat.toFixed(6)}
+            </Typography>
+            <Typography variant="body2" sx={{ fontSize: "0.8rem" }}>
+              Longitud: {point.lng.toFixed(6)}
+            </Typography>
           </Box>
 
           <Box sx={{ mt: 2 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 0.5, fontSize: "0.875rem" }}>
+            <Typography
+              variant="subtitle2"
+              sx={{ fontWeight: "bold", mb: 0.5, fontSize: "0.875rem" }}
+            >
               Foto:
             </Typography>
             <input
@@ -277,7 +331,7 @@ const PointForm = ({ point, onConfirmDelete }: PointFormProps) => {
               onChange={handleFileInputChange}
               style={{ display: "none" }}
             />
-            
+
             {imagePreview ? (
               <Box
                 sx={{
@@ -314,39 +368,49 @@ const PointForm = ({ point, onConfirmDelete }: PointFormProps) => {
                   <DeleteIcon />
                 </IconButton>
               </Box>
-            ) : !isSavedPoint && (
-              <Box
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                onClick={handleClickUpload}
-                sx={{
-                  border: `2px dashed ${isDragging ? "#3b82f6" : "#e0e0e0"}`,
-                  borderRadius: 1,
-                  p: 3,
-                  textAlign: "center",
-                  minHeight: "150px",
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "center",
-                  alignItems: "center",
-                  cursor: "pointer",
-                  backgroundColor: isDragging ? "#f0f7ff" : "#fafafa",
-                  transition: "all 0.2s ease",
-                  "&:hover": {
-                    borderColor: "#3b82f6",
-                    backgroundColor: "#f0f7ff",
-                  },
-                }}
-              >
-                <CloudUploadIcon sx={{ fontSize: 48, color: "#9ca3af", mb: 1 }} />
-                <Typography variant="body2" sx={{ color: "#6b7280", mb: 0.5, fontSize: "0.85rem" }}>
-                  Arrastra una imagen aquí o haz clic para seleccionar
-                </Typography>
-                <Typography variant="caption" sx={{ color: "#9ca3af", fontSize: "0.75rem" }}>
-                  PNG, JPG, GIF hasta 10MB
-                </Typography>
-              </Box>
+            ) : (
+              !isSavedPoint && (
+                <Box
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  onClick={handleClickUpload}
+                  sx={{
+                    border: `2px dashed ${isDragging ? "#3b82f6" : "#e0e0e0"}`,
+                    borderRadius: 1,
+                    p: 3,
+                    textAlign: "center",
+                    minHeight: "150px",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    cursor: "pointer",
+                    backgroundColor: isDragging ? "#f0f7ff" : "#fafafa",
+                    transition: "all 0.2s ease",
+                    "&:hover": {
+                      borderColor: "#3b82f6",
+                      backgroundColor: "#f0f7ff",
+                    },
+                  }}
+                >
+                  <CloudUploadIcon
+                    sx={{ fontSize: 48, color: "#9ca3af", mb: 1 }}
+                  />
+                  <Typography
+                    variant="body2"
+                    sx={{ color: "#6b7280", mb: 0.5, fontSize: "0.85rem" }}
+                  >
+                    Arrastra una imagen aquí o haz clic para seleccionar
+                  </Typography>
+                  <Typography
+                    variant="caption"
+                    sx={{ color: "#9ca3af", fontSize: "0.75rem" }}
+                  >
+                    PNG, JPG, GIF hasta 10MB
+                  </Typography>
+                </Box>
+              )
             )}
           </Box>
 
@@ -378,12 +442,18 @@ const PointForm = ({ point, onConfirmDelete }: PointFormProps) => {
                 onChange={(e) => setStatus(e.target.value)}
                 sx={{
                   "& .MuiSelect-select": {
-                    color: statusOptions.find((s) => s.value === status)?.color || "inherit",
+                    color:
+                      statusOptions.find((s) => s.value === status)?.color ||
+                      "inherit",
                     fontWeight: 500,
                   },
                   "&.Mui-disabled .MuiSelect-select": {
-                    color: statusOptions.find((s) => s.value === status)?.color || "inherit",
-                    WebkitTextFillColor: statusOptions.find((s) => s.value === status)?.color || "inherit",
+                    color:
+                      statusOptions.find((s) => s.value === status)?.color ||
+                      "inherit",
+                    WebkitTextFillColor:
+                      statusOptions.find((s) => s.value === status)?.color ||
+                      "inherit",
                   },
                 }}
               >
@@ -426,7 +496,13 @@ const PointForm = ({ point, onConfirmDelete }: PointFormProps) => {
             <Box sx={{ mt: 2, display: "flex", justifyContent: "flex-end" }}>
               <Button
                 variant="contained"
-                startIcon={isSaving ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
+                startIcon={
+                  isSaving ? (
+                    <CircularProgress size={20} color="inherit" />
+                  ) : (
+                    <SaveIcon />
+                  )
+                }
                 onClick={handleSave}
                 disabled={isSaving}
                 sx={{
@@ -456,12 +532,12 @@ const PointForm = ({ point, onConfirmDelete }: PointFormProps) => {
         open={showSuccessSnackbar}
         autoHideDuration={2000}
         onClose={() => setShowSuccessSnackbar(false)}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}
       >
-        <Alert 
-          onClose={() => setShowSuccessSnackbar(false)} 
-          severity="success" 
-          sx={{ width: '100%' }}
+        <Alert
+          onClose={() => setShowSuccessSnackbar(false)}
+          severity="success"
+          sx={{ width: "100%" }}
         >
           Punto guardado exitosamente
         </Alert>
@@ -471,4 +547,3 @@ const PointForm = ({ point, onConfirmDelete }: PointFormProps) => {
 };
 
 export default PointForm;
-
