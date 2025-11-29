@@ -1,0 +1,81 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function para verificar si el usuario está autenticado
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function para verificar si el usuario es administrador
+    function isAdmin() {
+      return isAuthenticated() && 
+             request.auth.token.role == 'admin';
+    }
+    
+    // Helper function para verificar si el usuario es el dueño del documento
+    function isOwner(userId) {
+      return isAuthenticated() && 
+             request.auth.uid == userId;
+    }
+    
+    // Colección de usuarios
+    match /users/{userId} {
+      // Cualquier usuario autenticado puede leer su propio perfil
+      // Los administradores pueden leer cualquier perfil
+      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      
+      // Solo los administradores pueden crear/actualizar/eliminar usuarios
+      // (aunque la Cloud Function también puede hacerlo)
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+    
+    // Colección de puntos
+    match /punto/{pointId} {
+      // Todos los usuarios autenticados pueden leer puntos
+      allow read: if isAuthenticated();
+      
+      // Cualquier usuario autenticado puede crear puntos
+      allow create: if isAuthenticated() && 
+                       request.resource.data.userId == request.auth.uid;
+      
+      // Solo el dueño del punto o un administrador pueden actualizar
+      allow update: if isAuthenticated() && 
+                       (isOwner(resource.data.userId) || isAdmin());
+      
+      // Solo el dueño del punto o un administrador pueden eliminar
+      allow delete: if isAuthenticated() && 
+                       (isOwner(resource.data.userId) || isAdmin());
+    }
+    
+    // Colección de puntos guardados
+    match /puntosGuardados/{savedPointId} {
+      // Los usuarios solo pueden leer sus propios puntos guardados
+      // Los administradores pueden leer todos
+      allow read: if isAuthenticated() && 
+                     (isOwner(resource.data.userId) || isAdmin());
+      
+      // Los usuarios pueden crear sus propios puntos guardados
+      allow create: if isAuthenticated() && 
+                       request.resource.data.userId == request.auth.uid;
+      
+      // Los usuarios solo pueden actualizar sus propios puntos guardados
+      // Los administradores pueden actualizar cualquier punto guardado
+      allow update: if isAuthenticated() && 
+                       (isOwner(resource.data.userId) || isAdmin());
+      
+      // Los usuarios solo pueden eliminar sus propios puntos guardados
+      // Los administradores pueden eliminar cualquier punto guardado
+      allow delete: if isAuthenticated() && 
+                       (isOwner(resource.data.userId) || isAdmin());
+    }
+    
+    // Denegar acceso a cualquier otra colección
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+

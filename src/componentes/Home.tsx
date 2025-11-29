@@ -3,8 +3,8 @@ import MapboxMap from './MapboxMap'
 import NavBar from './NavBar'
 import PointForm from './PointForm'
 import PointsList from './PointsList'
-import { getSavedPoints, getMyPoints } from '../firebase/points'
-import { Bookmark as BookmarkIcon, Person as PersonIcon } from '@mui/icons-material'
+import { getSavedPoints, getMyPoints, getPendingPoints } from '../firebase/points'
+import { Bookmark as BookmarkIcon, Person as PersonIcon, PendingActions as PendingIcon } from '@mui/icons-material'
 import type { Point } from '../types'
 import './Home.css'
 
@@ -12,7 +12,9 @@ const Home = () => {
   const [selectedPoint, setSelectedPoint] = useState<Point | null>(null)
   const [showOnlySavedPoints, setShowOnlySavedPoints] = useState(false)
   const [showOnlyMyPoints, setShowOnlyMyPoints] = useState(false)
+  const [showPendingPoints, setShowPendingPoints] = useState(false)
   const [savedPointsRefreshKey, setSavedPointsRefreshKey] = useState(0)
+  const [pendingPointsRefreshKey, setPendingPointsRefreshKey] = useState(0)
   const [mapRefreshKey, setMapRefreshKey] = useState(0)
 
   const handlePointAdded = (point: Point) => {
@@ -55,6 +57,14 @@ const Home = () => {
     }
   }
 
+  const handleStatusUpdated = () => {
+    // Refrescar el listado de puntos pendientes cuando se actualiza el estado
+    if (showPendingPoints) {
+      setPendingPointsRefreshKey(prev => prev + 1)
+      setMapRefreshKey(prev => prev + 1) // También refrescar el mapa
+    }
+  }
+
   const handlePointSaved = () => {
     // Cuando se guarda un punto nuevo, eliminar el punto temporal del mapa
     // y forzar refresh del mapa para mostrar el punto guardado
@@ -81,6 +91,14 @@ const Home = () => {
   const handleShowAllPoints = () => {
     setShowOnlySavedPoints(false)
     setShowOnlyMyPoints(false)
+    setShowPendingPoints(false)
+    setSelectedPoint(null) // Cerrar el formulario si está abierto
+  }
+
+  const handleShowPendingPoints = () => {
+    setShowPendingPoints(true)
+    setShowOnlySavedPoints(false)
+    setShowOnlyMyPoints(false)
     setSelectedPoint(null) // Cerrar el formulario si está abierto
   }
 
@@ -90,8 +108,10 @@ const Home = () => {
         onShowSavedPoints={handleShowSavedPoints}
         onShowAllPoints={handleShowAllPoints}
         onShowMyPoints={handleShowMyPoints}
+        onShowPendingPoints={handleShowPendingPoints}
         showOnlySavedPoints={showOnlySavedPoints}
         showOnlyMyPoints={showOnlyMyPoints}
+        showPendingPoints={showPendingPoints}
       />
       <div className="map-wrapper" style={{ position: 'relative' }}>
         <MapboxMap 
@@ -126,6 +146,18 @@ const Home = () => {
             tooltipTitle="Mostrar mis puntos"
           />
         )}
+        {showPendingPoints && (
+          <PointsList
+            title="Puntos Pendientes"
+            fetchPoints={getPendingPoints}
+            onPointClick={handlePointAdded}
+            showPointStatus={true}
+            icon={<PendingIcon sx={{ color: '#f59e0b', fontSize: '24px' }} />}
+            emptyMessage="No hay puntos pendientes"
+            tooltipTitle="Mostrar puntos pendientes"
+            refreshKey={pendingPointsRefreshKey}
+          />
+        )}
         {selectedPoint && (
           <PointForm 
             point={selectedPoint} 
@@ -133,6 +165,8 @@ const Home = () => {
             onClose={handleCloseForm}
             onFavoriteChanged={handleFavoriteChanged}
             onPointSaved={handlePointSaved}
+            isAdminMode={showPendingPoints}
+            onStatusUpdated={handleStatusUpdated}
           />
         )}
       </div>

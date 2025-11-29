@@ -21,6 +21,8 @@ import {
   CloudUpload as CloudUploadIcon,
   Delete as DeleteIcon,
   Save as SaveIcon,
+  CheckCircle as CheckCircleIcon,
+  Cancel as CancelIcon,
 } from "@mui/icons-material";
 import CancelDialog from "./CancelDialog";
 import {
@@ -28,10 +30,13 @@ import {
   isPointSaved,
   savePointToFavorites,
   removePointFromFavorites,
+  updatePointStatus,
+  getUserInfo,
 } from "../firebase/points";
 import { getCurrentUser } from "../firebase/auth";
 import type { PointFormProps } from "../types";
 import { CATEGORY_OPTIONS, STATUS_OPTIONS } from "../constants/points";
+import type { PointData } from "../types";
 
 const PointForm = ({
   point,
@@ -39,6 +44,8 @@ const PointForm = ({
   onClose,
   onFavoriteChanged,
   onPointSaved,
+  isAdminMode = false,
+  onStatusUpdated,
 }: PointFormProps) => {
   const [openDialog, setOpenDialog] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -55,6 +62,10 @@ const PointForm = ({
   const [isFavorite, setIsFavorite] = useState(false);
   const [isCheckingFavorite, setIsCheckingFavorite] = useState(false);
   const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
+  const [creatorInfo, setCreatorInfo] = useState<{ email: string; displayName: string } | null>(null);
+  const [isLoadingCreator, setIsLoadingCreator] = useState(false);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Determinar si el punto ya está guardado (tiene pointStatus)
@@ -62,6 +73,25 @@ const PointForm = ({
 
   // Verificar si el usuario está logueado
   const user = getCurrentUser();
+
+  // Obtener información del creador cuando está en modo admin
+  useEffect(() => {
+    const loadCreatorInfo = async () => {
+      if (isAdminMode && point.userId) {
+        setIsLoadingCreator(true);
+        try {
+          const info = await getUserInfo(point.userId);
+          setCreatorInfo(info);
+        } catch (error) {
+          console.error('Error al cargar información del creador:', error);
+        } finally {
+          setIsLoadingCreator(false);
+        }
+      }
+    };
+
+    loadCreatorInfo();
+  }, [isAdminMode, point.userId]);
 
   // Actualizar los estados cuando cambia el punto
   useEffect(() => {
@@ -72,10 +102,10 @@ const PointForm = ({
     setImageFile(null); // Resetear el archivo de imagen cuando cambia el punto
   }, [point.id, point.imageUrl, point.category, point.status, point.comments]);
 
-  // Verificar si el punto está guardado en favoritos cuando está en modo read-only
+  // Verificar si el punto está guardado en favoritos cuando está en modo read-only (solo si no es modo admin)
   useEffect(() => {
     const checkFavoriteStatus = async () => {
-      if (isSavedPoint && user && point.id) {
+      if (isSavedPoint && user && point.id && !isAdminMode) {
         setIsCheckingFavorite(true);
         try {
           const saved = await isPointSaved(point.id);
@@ -89,7 +119,7 @@ const PointForm = ({
     };
 
     checkFavoriteStatus();
-  }, [isSavedPoint, user, point.id]);
+  }, [isSavedPoint, user, point.id, isAdminMode]);
 
   const categories = CATEGORY_OPTIONS;
   const statusOptions = STATUS_OPTIONS;
@@ -212,7 +242,7 @@ const PointForm = ({
   };
 
   const handleToggleFavorite = async () => {
-    if (!user || !point.id || isTogglingFavorite) return;
+    if (!user || !point.id || isTogglingFavorite || isAdminMode) return;
 
     setIsTogglingFavorite(true);
     try {
@@ -237,6 +267,87 @@ const PointForm = ({
     }
   };
 
+  const handleUpdateStatus = async (newStatus: 'APROBADO' | 'RECHAZADO') => {
+    if (!point.id || isUpdatingStatus) return;
+
+    setIsUpdatingStatus(true);
+    setSaveError(null);
+
+    try {
+      await updatePointStatus(point.id, newStatus);
+      setSuccessMessage(newStatus === 'APROBADO' ? 'Punto aprobado exitosamente' : 'Punto rechazado exitosamente');
+      setShowSuccessSnackbar(true);
+      
+      // Notificar que se actualizó el estado
+      if (onStatusUpdated) {
+        onStatusUpdated();
+      }
+
+      // Cerrar el formulario después de 2 segundos
+      setTimeout(() => {
+        if (onClose) {
+          onClose();
+        }
+      }, 2000);
+    } catch (error) {
+      console.error('Error al actualizar estado:', error);
+      setSaveError(
+        error instanceof Error ? error.message : 'Error al actualizar el estado del punto'
+      );
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
+
+  // Formatear fecha de creación
+  const formatDate = (timestamp: any): string => {
+    if (!timestamp) return 'Fecha no disponible';
+    try {
+      // Si es un Timestamp de Firestore
+      if (timestamp && typeof timestamp.toDate === 'function') {
+        const date = timestamp.toDate();
+        return date.toLocaleDateString('es-ES', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+      }
+      // Si es un objeto con toMillis
+      if (timestamp && typeof timestamp.toMillis === 'function') {
+        const date = new Date(timestamp.toMillis());
+        return date.toLocaleDateString('es-ES', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+      }
+      // Si es un número (milliseconds)
+      if (typeof timestamp === 'number') {
+        const date = new Date(timestamp);
+        return date.toLocaleDateString('es-ES', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+      }
+      return 'Fecha no disponible';
+    } catch {
+      return 'Fecha no disponible';
+    }
+  };
+
+  // Obtener createdAt del punto (puede venir como Point o PointWithId)
+  const getCreatedAt = (): any => {
+    const pointWithId = point as PointData & { createdAt?: any };
+    return pointWithId.createdAt;
+  };
+
   return (
     <Box
       sx={{
@@ -253,9 +364,9 @@ const PointForm = ({
           title={
             <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
               <Typography variant="h6" component="span">
-                Información del Punto
+                {isAdminMode ? 'Administrar Punto' : 'Información del Punto'}
               </Typography>
-              {isSavedPoint && user && point.id && (
+              {isSavedPoint && user && point.id && !isAdminMode && (
                 <IconButton
                   onClick={handleToggleFavorite}
                   disabled={isTogglingFavorite || isCheckingFavorite}
@@ -302,6 +413,45 @@ const PointForm = ({
           }
         />
         <CardContent sx={{ p: 2, maxHeight: "70vh", overflowY: "auto" }}>
+          {isAdminMode && (
+            <>
+              <Box sx={{ mb: 1.5, p: 1.5, backgroundColor: "#f5f5f5", borderRadius: 1 }}>
+                <Typography
+                  variant="subtitle2"
+                  sx={{ fontWeight: "bold", mb: 1, fontSize: "0.875rem" }}
+                >
+                  Información del Creador:
+                </Typography>
+                {isLoadingCreator ? (
+                  <CircularProgress size={16} />
+                ) : creatorInfo ? (
+                  <>
+                    <Typography variant="body2" sx={{ fontSize: "0.8rem", mb: 0.5 }}>
+                      <strong>Nombre:</strong> {creatorInfo.displayName || 'No disponible'}
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontSize: "0.8rem" }}>
+                      <strong>Email:</strong> {creatorInfo.email || 'No disponible'}
+                    </Typography>
+                  </>
+                ) : (
+                  <Typography variant="body2" sx={{ fontSize: "0.8rem", color: "#9ca3af" }}>
+                    No se pudo cargar la información del creador
+                  </Typography>
+                )}
+              </Box>
+              <Box sx={{ mb: 1.5, p: 1.5, backgroundColor: "#f5f5f5", borderRadius: 1 }}>
+                <Typography
+                  variant="subtitle2"
+                  sx={{ fontWeight: "bold", mb: 0.5, fontSize: "0.875rem" }}
+                >
+                  Fecha de Creación:
+                </Typography>
+                <Typography variant="body2" sx={{ fontSize: "0.8rem" }}>
+                  {formatDate(getCreatedAt())}
+                </Typography>
+              </Box>
+            </>
+          )}
           <Box sx={{ mb: 1.5 }}>
             <Typography
               variant="subtitle2"
@@ -492,7 +642,59 @@ const PointForm = ({
             </Box>
           )}
 
-          {!isSavedPoint && (
+          {isAdminMode && point.pointStatus === 'PENDIENTE' && (
+            <Box sx={{ mt: 2, display: "flex", gap: 2, justifyContent: "flex-end" }}>
+              <Button
+                variant="contained"
+                color="error"
+                startIcon={
+                  isUpdatingStatus ? (
+                    <CircularProgress size={20} color="inherit" />
+                  ) : (
+                    <CancelIcon />
+                  )
+                }
+                onClick={() => handleUpdateStatus('RECHAZADO')}
+                disabled={isUpdatingStatus}
+                sx={{
+                  backgroundColor: "#ef4444",
+                  "&:hover": {
+                    backgroundColor: "#dc2626",
+                  },
+                  "&:disabled": {
+                    backgroundColor: "#9ca3af",
+                  },
+                }}
+              >
+                {isUpdatingStatus ? "Actualizando..." : "Rechazar"}
+              </Button>
+              <Button
+                variant="contained"
+                color="success"
+                startIcon={
+                  isUpdatingStatus ? (
+                    <CircularProgress size={20} color="inherit" />
+                  ) : (
+                    <CheckCircleIcon />
+                  )
+                }
+                onClick={() => handleUpdateStatus('APROBADO')}
+                disabled={isUpdatingStatus}
+                sx={{
+                  backgroundColor: "#10b981",
+                  "&:hover": {
+                    backgroundColor: "#059669",
+                  },
+                  "&:disabled": {
+                    backgroundColor: "#9ca3af",
+                  },
+                }}
+              >
+                {isUpdatingStatus ? "Actualizando..." : "Aprobar"}
+              </Button>
+            </Box>
+          )}
+          {!isSavedPoint && !isAdminMode && (
             <Box sx={{ mt: 2, display: "flex", justifyContent: "flex-end" }}>
               <Button
                 variant="contained"
@@ -531,15 +733,21 @@ const PointForm = ({
       <Snackbar
         open={showSuccessSnackbar}
         autoHideDuration={2000}
-        onClose={() => setShowSuccessSnackbar(false)}
+        onClose={() => {
+          setShowSuccessSnackbar(false);
+          setSuccessMessage('');
+        }}
         anchorOrigin={{ vertical: "top", horizontal: "center" }}
       >
         <Alert
-          onClose={() => setShowSuccessSnackbar(false)}
+          onClose={() => {
+            setShowSuccessSnackbar(false);
+            setSuccessMessage('');
+          }}
           severity="success"
           sx={{ width: "100%" }}
         >
-          Punto guardado exitosamente
+          {successMessage || 'Punto guardado exitosamente'}
         </Alert>
       </Snackbar>
     </Box>

@@ -4,9 +4,11 @@ import type { User } from 'firebase/auth';
 import logo from '../assets/LogoRampApp.svg';
 import './Home.css';
 import type { NavBarProps } from '../types';
+import { useUserRole } from '../hooks/useUserRole';
 
-const NavBar = ({ onShowSavedPoints, onShowAllPoints, onShowMyPoints, showOnlySavedPoints = false, showOnlyMyPoints = false }: NavBarProps) => {
+const NavBar = ({ onShowSavedPoints, onShowAllPoints, onShowMyPoints, onShowPendingPoints, showOnlySavedPoints = false, showOnlyMyPoints = false, showPendingPoints = false }: NavBarProps) => {
   const [user, setUser] = useState<User | null>(null);
+  const { isAdmin } = useUserRole();
 
   useEffect(() => {
     // Verificar si hay un usuario autenticado al cargar
@@ -63,8 +65,17 @@ const NavBar = ({ onShowSavedPoints, onShowAllPoints, onShowMyPoints, showOnlySa
 
   const handleInicioClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
-    if ((showOnlySavedPoints || showOnlyMyPoints) && onShowAllPoints) {
+    if ((showOnlySavedPoints || showOnlyMyPoints || showPendingPoints) && onShowAllPoints) {
       onShowAllPoints();
+    }
+  };
+
+  const handlePendingPointsClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    if (showPendingPoints && onShowAllPoints) {
+      onShowAllPoints();
+    } else if (onShowPendingPoints) {
+      onShowPendingPoints();
     }
   };
 
@@ -79,7 +90,7 @@ const NavBar = ({ onShowSavedPoints, onShowAllPoints, onShowMyPoints, showOnlySa
           <li>
             <a 
               href="/" 
-              className={`navbar-link ${!showOnlySavedPoints && !showOnlyMyPoints ? 'active' : ''}`}
+              className={`navbar-link ${!showOnlySavedPoints && !showOnlyMyPoints && !showPendingPoints ? 'active' : ''}`}
               onClick={handleInicioClick}
             >
               Inicio
@@ -105,6 +116,17 @@ const NavBar = ({ onShowSavedPoints, onShowAllPoints, onShowMyPoints, showOnlySa
                   Mis puntos
                 </a>
               </li>
+              {isAdmin && (
+                <li>
+                  <a 
+                    href="/" 
+                    className={`navbar-link ${showPendingPoints ? 'active' : ''}`}
+                    onClick={handlePendingPointsClick}
+                  >
+                    Administrar puntos
+                  </a>
+                </li>
+              )}
             </>
           )}
           <li><a href="/" className="navbar-link" onClick={handleLinkClick}>Info útil</a></li>
