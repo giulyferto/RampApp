@@ -3,14 +3,7 @@ import { signInWithGoogle, logout, onAuthChange, getCurrentUser } from '../fireb
 import type { User } from 'firebase/auth';
 import logo from '../assets/LogoRampApp.svg';
 import './Home.css';
-
-interface NavBarProps {
-  onShowSavedPoints?: () => void;
-  onShowAllPoints?: () => void;
-  onShowMyPoints?: () => void;
-  showOnlySavedPoints?: boolean;
-  showOnlyMyPoints?: boolean;
-}
+import type { NavBarProps } from '../types';
 
 const NavBar = ({ onShowSavedPoints, onShowAllPoints, onShowMyPoints, showOnlySavedPoints = false, showOnlyMyPoints = false }: NavBarProps) => {
   const [user, setUser] = useState<User | null>(null);

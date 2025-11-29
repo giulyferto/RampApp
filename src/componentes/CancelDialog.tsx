@@ -1,14 +1,5 @@
 import { Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Button } from "@mui/material";
-
-interface CancelDialogProps {
-  open: boolean;
-  onClose: () => void;
-  onConfirm: () => void;
-  title?: string;
-  message?: string;
-  confirmText?: string;
-  cancelText?: string;
-}
+import type { CancelDialogProps } from "../types";
 
 const CancelDialog = ({
   open,

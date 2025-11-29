@@ -5,29 +5,9 @@ import { onAuthChange, getCurrentUser } from "../firebase/auth";
 import type { User } from "firebase/auth";
 import { Tooltip, Button } from "@mui/material";
 import { getPoints, getSavedPoints, getMyPoints } from "../firebase/points";
+import type { Point, MapboxMapProps } from "../types";
 
-export interface Point {
-  id: string;
-  lng: number;
-  lat: number;
-  category?: string;
-  status?: string;
-  comments?: string;
-  imageUrl?: string;
-  userId?: string;
-  pointStatus?: string;
-}
-
-interface MapboxMapProps {
-  onPointAdded?: (point: Point) => void;
-  onRemovePoint?: (pointId: string) => void;
-  onPointUpdated?: (point: Point) => void;
-  isFormOpen?: boolean;
-  showOnlySavedPoints?: boolean;
-  showOnlyMyPoints?: boolean;
-}
-
-const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = false, showOnlySavedPoints = false, showOnlyMyPoints = false }: MapboxMapProps) => {
+const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = false, showOnlySavedPoints = false, showOnlyMyPoints = false, savedPointsRefreshKey, mapRefreshKey }: MapboxMapProps) => {
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
@@ -239,7 +219,7 @@ const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = f
       mapRef.current.once("load", loadPoints);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showOnlySavedPoints, showOnlyMyPoints, user]);
+  }, [showOnlySavedPoints, showOnlyMyPoints, user, savedPointsRefreshKey, mapRefreshKey]);
 
   // Exponer la función de eliminación
   useEffect(() => {
