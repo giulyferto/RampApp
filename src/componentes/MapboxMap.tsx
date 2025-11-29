@@ -5,16 +5,23 @@ import { onAuthChange, getCurrentUser } from "../firebase/auth";
 import type { User } from "firebase/auth";
 import { Tooltip, Button } from "@mui/material";
 
-interface Point {
+export interface Point {
   id: string;
   lng: number;
   lat: number;
 }
 
-const MapboxMap = () => {
+interface MapboxMapProps {
+  onPointAdded?: (point: Point) => void;
+  onRemovePoint?: (pointId: string) => void;
+  isFormOpen?: boolean;
+}
+
+const MapboxMap = ({ onPointAdded, onRemovePoint, isFormOpen = false }: MapboxMapProps) => {
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
+  const pointsMapRef = useRef<Map<string, mapboxgl.Marker>>(new Map());
   const [isAddingPoint, setIsAddingPoint] = useState(false);
   const [user, setUser] = useState<User | null>(null);
 
@@ -43,6 +50,9 @@ const MapboxMap = () => {
         zoom: 11.63,
       });
       mapRef.current = map;
+
+      // Agregar controles de navegación (zoom in, zoom out, brújula)
+      map.addControl(new mapboxgl.NavigationControl(), "bottom-right");
     }
 
     return () => {
@@ -96,7 +106,37 @@ const MapboxMap = () => {
     });
 
     markersRef.current.push(marker);
+    pointsMapRef.current.set(point.id, marker);
   };
+
+  // Exponer la función de eliminación
+  useEffect(() => {
+    interface WindowWithRemovePoint extends Window {
+      __removePointFromMap?: (pointId: string) => void;
+    }
+    
+    // Función para eliminar un punto del mapa
+    const removePoint = (pointId: string) => {
+      const marker = pointsMapRef.current.get(pointId);
+      if (marker) {
+        marker.remove();
+        pointsMapRef.current.delete(pointId);
+        // Remover del array de marcadores también
+        const index = markersRef.current.indexOf(marker);
+        if (index > -1) {
+          markersRef.current.splice(index, 1);
+        }
+        if (onRemovePoint) {
+          onRemovePoint(pointId);
+        }
+      }
+    };
+
+    (window as WindowWithRemovePoint).__removePointFromMap = removePoint;
+    return () => {
+      delete (window as WindowWithRemovePoint).__removePointFromMap;
+    };
+  }, [onRemovePoint]);
 
   // Función para manejar clics en el mapa usando el estado actual
   useEffect(() => {
@@ -111,6 +151,10 @@ const MapboxMap = () => {
         };
         addPointToMap(newPoint);
         setIsAddingPoint(false);
+        // Notificar al componente padre que se agregó un punto
+        if (onPointAdded) {
+          onPointAdded(newPoint);
+        }
       }
     };
 
@@ -121,7 +165,7 @@ const MapboxMap = () => {
         mapRef.current.off("click", handleMapClick);
       }
     };
-  }, [isAddingPoint, user]);
+  }, [isAddingPoint, user, onPointAdded]);
 
   const handleAddPointClick = () => {
     if (user) {
@@ -145,7 +189,30 @@ const MapboxMap = () => {
           gap: "10px",
         }}
       >
-        {!isAddingPoint ? (
+        {isAddingPoint ? (
+          <div style={{ display: "flex", gap: "10px" }}>
+            <div
+              style={{
+                padding: "10px 20px",
+                backgroundColor: "white",
+                borderRadius: "5px",
+                boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+                fontSize: "14px",
+                fontWeight: "500",
+                color: "#3b82f6",
+              }}
+            >
+              Haz clic en el mapa para agregar un punto
+            </div>
+            <Button
+              variant="contained"
+              color="error"
+              onClick={handleCancelAddPoint}
+            >
+              Cancelar
+            </Button>
+          </div>
+        ) : !isFormOpen && (
           <Tooltip
             title="Inicia sesión con tu cuenta para agregar un punto"
             disableHoverListener={!!user}
@@ -171,29 +238,6 @@ const MapboxMap = () => {
               </Button>
             </span>
           </Tooltip>
-        ) : (
-          <div style={{ display: "flex", gap: "10px" }}>
-            <div
-              style={{
-                padding: "10px 20px",
-                backgroundColor: "white",
-                borderRadius: "5px",
-                boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
-                fontSize: "14px",
-                fontWeight: "500",
-                color: "#3b82f6",
-              }}
-            >
-              Haz clic en el mapa para agregar un punto
-            </div>
-            <Button
-              variant="contained"
-              color="error"
-              onClick={handleCancelAddPoint}
-            >
-              Cancelar
-            </Button>
-          </div>
         )}
       </div>
       <div id="map-container" ref={mapContainerRef} style={{ width: "100%", height: "100%" }} />
