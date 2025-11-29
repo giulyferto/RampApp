@@ -7,10 +7,12 @@ import './Home.css';
 interface NavBarProps {
   onShowSavedPoints?: () => void;
   onShowAllPoints?: () => void;
+  onShowMyPoints?: () => void;
   showOnlySavedPoints?: boolean;
+  showOnlyMyPoints?: boolean;
 }
 
-const NavBar = ({ onShowSavedPoints, onShowAllPoints, showOnlySavedPoints = false }: NavBarProps) => {
+const NavBar = ({ onShowSavedPoints, onShowAllPoints, onShowMyPoints, showOnlySavedPoints = false, showOnlyMyPoints = false }: NavBarProps) => {
   const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
@@ -53,13 +55,22 @@ const NavBar = ({ onShowSavedPoints, onShowAllPoints, showOnlySavedPoints = fals
     }
   };
 
+  const handleMyPointsClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    if (showOnlyMyPoints && onShowAllPoints) {
+      onShowAllPoints();
+    } else if (onShowMyPoints) {
+      onShowMyPoints();
+    }
+  };
+
   const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
   };
 
   const handleInicioClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
-    if (showOnlySavedPoints && onShowAllPoints) {
+    if ((showOnlySavedPoints || showOnlyMyPoints) && onShowAllPoints) {
       onShowAllPoints();
     }
   };
@@ -75,7 +86,7 @@ const NavBar = ({ onShowSavedPoints, onShowAllPoints, showOnlySavedPoints = fals
           <li>
             <a 
               href="/" 
-              className={`navbar-link ${!showOnlySavedPoints ? 'active' : ''}`}
+              className={`navbar-link ${!showOnlySavedPoints && !showOnlyMyPoints ? 'active' : ''}`}
               onClick={handleInicioClick}
             >
               Inicio
@@ -92,7 +103,15 @@ const NavBar = ({ onShowSavedPoints, onShowAllPoints, showOnlySavedPoints = fals
                   Puntos guardados
                 </a>
               </li>
-              <li><a href="/" className="navbar-link" onClick={handleLinkClick}>Mis puntos</a></li>
+              <li>
+                <a 
+                  href="/" 
+                  className={`navbar-link ${showOnlyMyPoints ? 'active' : ''}`}
+                  onClick={handleMyPointsClick}
+                >
+                  Mis puntos
+                </a>
+              </li>
             </>
           )}
           <li><a href="/" className="navbar-link" onClick={handleLinkClick}>Info útil</a></li>

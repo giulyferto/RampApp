@@ -270,3 +270,56 @@ export const getSavedPoints = async (): Promise<(PointData & { id: string })[]> 
   }
 };
 
+// Obtener todos los puntos creados por el usuario actual
+export const getMyPoints = async (): Promise<(PointData & { id: string })[]> => {
+  const user = getCurrentUser();
+  
+  if (!user) {
+    throw new Error('Usuario no autenticado');
+  }
+
+  try {
+    // Intentar obtener los puntos con ordenamiento
+    const q = query(
+      collection(db, 'punto'),
+      where('userId', '==', user.uid),
+      orderBy('createdAt', 'desc')
+    );
+    const querySnapshot = await getDocs(q);
+    
+    return querySnapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...(doc.data() as PointData),
+    }));
+  } catch (error) {
+    // Si el error es por falta de índice, intentar sin orderBy y ordenar en el cliente
+    if (error instanceof Error && error.message.includes('index')) {
+      try {
+        const q = query(
+          collection(db, 'punto'),
+          where('userId', '==', user.uid)
+        );
+        const querySnapshot = await getDocs(q);
+        
+        const points = querySnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...(doc.data() as PointData),
+        }));
+        
+        // Ordenar por fecha de creación en el cliente (más recientes primero)
+        return points.sort((a, b) => {
+          const aTime = a.createdAt?.toMillis() || 0;
+          const bTime = b.createdAt?.toMillis() || 0;
+          return bTime - aTime;
+        });
+      } catch (fallbackError) {
+        console.error('Error al obtener mis puntos (fallback):', fallbackError);
+        throw new Error('Error al obtener mis puntos. Por favor, crea el índice compuesto en Firestore o contacta al administrador.');
+      }
+    }
+    // Si es otro tipo de error, lanzarlo con más información
+    console.error('Error al obtener mis puntos:', error);
+    throw new Error(error instanceof Error ? error.message : 'Error al obtener mis puntos');
+  }
+};
+
