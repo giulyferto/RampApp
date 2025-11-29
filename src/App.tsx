@@ -1,11 +1,11 @@
 import './App.css'
-import MapboxMap from './componentes/MapboxMap'
+import Home from './componentes/Home'
 
 function App() {
 
   return (
     <>
-      <MapboxMap />
+      <Home />
     </>
   )
 }
