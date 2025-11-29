@@ -1,6 +1,9 @@
 import mapboxgl from "mapbox-gl";
 import { useRef, useEffect, useState } from "react";
 import "mapbox-gl/dist/mapbox-gl.css";
+import { onAuthChange, getCurrentUser } from "../firebase/auth";
+import type { User } from "firebase/auth";
+import { Tooltip, Button } from "@mui/material";
 
 interface Point {
   id: string;
@@ -13,6 +16,20 @@ const MapboxMap = () => {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
   const [isAddingPoint, setIsAddingPoint] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+
+  // Verificar estado de autenticación
+  useEffect(() => {
+    // Verificar si hay un usuario autenticado al cargar
+    setUser(getCurrentUser());
+
+    // Escuchar cambios en el estado de autenticación
+    const unsubscribe = onAuthChange((currentUser) => {
+      setUser(currentUser);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
@@ -86,7 +103,7 @@ const MapboxMap = () => {
     if (!mapRef.current) return;
 
     const handleMapClick = (e: mapboxgl.MapMouseEvent) => {
-      if (isAddingPoint) {
+      if (isAddingPoint && user) {
         const newPoint: Point = {
           id: Date.now().toString(),
           lng: e.lngLat.lng,
@@ -104,10 +121,12 @@ const MapboxMap = () => {
         mapRef.current.off("click", handleMapClick);
       }
     };
-  }, [isAddingPoint]);
+  }, [isAddingPoint, user]);
 
   const handleAddPointClick = () => {
-    setIsAddingPoint(true);
+    if (user) {
+      setIsAddingPoint(true);
+    }
   };
 
   const handleCancelAddPoint = () => {
@@ -127,22 +146,31 @@ const MapboxMap = () => {
         }}
       >
         {!isAddingPoint ? (
-          <button
-            onClick={handleAddPointClick}
-            style={{
-              padding: "10px 20px",
-              backgroundColor: "#3b82f6",
-              color: "white",
-              border: "none",
-              borderRadius: "5px",
-              cursor: "pointer",
-              fontSize: "14px",
-              fontWeight: "500",
-              boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
-            }}
+          <Tooltip
+            title="Inicia sesión con tu cuenta para agregar un punto"
+            disableHoverListener={!!user}
+            arrow
           >
-            + Agregar Punto
-          </button>
+            <span>
+              <Button
+                variant="contained"
+                onClick={handleAddPointClick}
+                disabled={!user}
+                sx={{
+                  backgroundColor: user ? "#3b82f6" : "#9ca3af",
+                  "&:hover": {
+                    backgroundColor: user ? "#2563eb" : "#9ca3af",
+                  },
+                  "&:disabled": {
+                    backgroundColor: "#9ca3af",
+                    opacity: 0.6,
+                  },
+                }}
+              >
+                + Agregar Punto
+              </Button>
+            </span>
+          </Tooltip>
         ) : (
           <div style={{ display: "flex", gap: "10px" }}>
             <div
@@ -158,22 +186,13 @@ const MapboxMap = () => {
             >
               Haz clic en el mapa para agregar un punto
             </div>
-            <button
+            <Button
+              variant="contained"
+              color="error"
               onClick={handleCancelAddPoint}
-              style={{
-                padding: "10px 20px",
-                backgroundColor: "#ef4444",
-                color: "white",
-                border: "none",
-                borderRadius: "5px",
-                cursor: "pointer",
-                fontSize: "14px",
-                fontWeight: "500",
-                boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
-              }}
             >
               Cancelar
-            </button>
+            </Button>
           </div>
         )}
       </div>
