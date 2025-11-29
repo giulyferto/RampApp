@@ -1,29 +1,43 @@
 import mapboxgl from "mapbox-gl";
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, useCallback } from "react";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { onAuthChange, getCurrentUser } from "../firebase/auth";
 import type { User } from "firebase/auth";
 import { Tooltip, Button } from "@mui/material";
+import { getPoints } from "../firebase/points";
 
 export interface Point {
   id: string;
   lng: number;
   lat: number;
+  category?: string;
+  status?: string;
+  comments?: string;
+  imageUrl?: string;
+  userId?: string;
+  pointStatus?: string;
 }
 
 interface MapboxMapProps {
   onPointAdded?: (point: Point) => void;
   onRemovePoint?: (pointId: string) => void;
+  onPointUpdated?: (point: Point) => void;
   isFormOpen?: boolean;
 }
 
-const MapboxMap = ({ onPointAdded, onRemovePoint, isFormOpen = false }: MapboxMapProps) => {
+const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = false }: MapboxMapProps) => {
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
   const pointsMapRef = useRef<Map<string, mapboxgl.Marker>>(new Map());
+  const onPointUpdatedRef = useRef(onPointUpdated);
   const [isAddingPoint, setIsAddingPoint] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+
+  // Mantener la referencia actualizada
+  useEffect(() => {
+    onPointUpdatedRef.current = onPointUpdated;
+  }, [onPointUpdated]);
 
   // Verificar estado de autenticación
   useEffect(() => {
@@ -71,7 +85,7 @@ const MapboxMap = ({ onPointAdded, onRemovePoint, isFormOpen = false }: MapboxMa
     }
   }, [isAddingPoint]);
 
-  const addPointToMap = (point: Point) => {
+  const addPointToMap = useCallback((point: Point, isSavedPoint = false) => {
     if (!mapRef.current) return;
 
     // Crear un elemento HTML personalizado para el marcador con emoji
@@ -79,7 +93,7 @@ const MapboxMap = ({ onPointAdded, onRemovePoint, isFormOpen = false }: MapboxMa
     el.className = "custom-marker";
     el.style.width = "auto";
     el.style.height = "auto";
-    el.style.cursor = "grab";
+    el.style.cursor = isSavedPoint ? "pointer" : "grab";
     el.style.fontSize = "32px";
     el.style.lineHeight = "1";
     el.style.userSelect = "none";
@@ -91,23 +105,78 @@ const MapboxMap = ({ onPointAdded, onRemovePoint, isFormOpen = false }: MapboxMa
     const marker = new mapboxgl.Marker({
       element: el,
       anchor: "bottom",
-      draggable: true,
+      draggable: !isSavedPoint, // Solo los puntos nuevos son arrastrables
     })
       .setLngLat([point.lng, point.lat])
       .addTo(mapRef.current);
 
-    // Cambiar cursor cuando se está arrastrando
-    marker.on("dragstart", () => {
-      el.style.cursor = "grabbing";
-    });
+    // Si es un punto guardado, hacer que sea clickeable para abrir el formulario
+    if (isSavedPoint) {
+      el.addEventListener("click", (e) => {
+        e.stopPropagation(); // Evitar que el click se propague al mapa
+        if (onPointAdded) {
+          onPointAdded(point);
+        }
+      });
+    } else {
+      // Cambiar cursor cuando se está arrastrando (solo para puntos nuevos)
+      marker.on("dragstart", () => {
+        el.style.cursor = "grabbing";
+      });
 
-    marker.on("dragend", () => {
-      el.style.cursor = "grab";
-    });
+      marker.on("dragend", () => {
+        el.style.cursor = "grab";
+        // Obtener las nuevas coordenadas del marcador
+        const newLngLat = marker.getLngLat();
+        const updatedPoint: Point = {
+          id: point.id,
+          lng: newLngLat.lng,
+          lat: newLngLat.lat,
+        };
+        // Notificar al componente padre que el punto se actualizó usando la ref
+        if (onPointUpdatedRef.current) {
+          onPointUpdatedRef.current(updatedPoint);
+        }
+      });
+    }
 
     markersRef.current.push(marker);
     pointsMapRef.current.set(point.id, marker);
-  };
+  }, [onPointAdded]);
+
+  // Cargar puntos guardados cuando el mapa esté listo
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    const loadSavedPoints = async () => {
+      try {
+        const savedPoints = await getPoints();
+        savedPoints.forEach((pointData) => {
+          const point: Point = {
+            id: pointData.id,
+            lng: pointData.lng,
+            lat: pointData.lat,
+            category: pointData.category,
+            status: pointData.status,
+            comments: pointData.comments,
+            imageUrl: pointData.imageUrl,
+            userId: pointData.userId,
+            pointStatus: pointData.pointStatus,
+          };
+          addPointToMap(point, true); // true indica que es un punto guardado
+        });
+      } catch (error) {
+        console.error("Error al cargar puntos:", error);
+      }
+    };
+
+    // Esperar a que el mapa esté listo
+    if (mapRef.current.loaded()) {
+      loadSavedPoints();
+    } else {
+      mapRef.current.once("load", loadSavedPoints);
+    }
+  }, [addPointToMap]);
 
   // Exponer la función de eliminación
   useEffect(() => {
@@ -165,7 +234,7 @@ const MapboxMap = ({ onPointAdded, onRemovePoint, isFormOpen = false }: MapboxMa
         mapRef.current.off("click", handleMapClick);
       }
     };
-  }, [isAddingPoint, user, onPointAdded]);
+  }, [isAddingPoint, user, onPointAdded, addPointToMap]);
 
   const handleAddPointClick = () => {
     if (user) {

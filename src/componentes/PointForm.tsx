@@ -1,8 +1,9 @@
-import { useState } from "react";
-import { Card, CardContent, CardHeader, IconButton, Box } from "@mui/material";
-import { Close as CloseIcon } from "@mui/icons-material";
+import { useState, useRef } from "react";
+import { Card, CardContent, CardHeader, IconButton, Box, Typography, FormControl, InputLabel, Select, MenuItem, TextField, Button, Alert, CircularProgress, Snackbar } from "@mui/material";
+import { Close as CloseIcon, CloudUpload as CloudUploadIcon, Delete as DeleteIcon, Save as SaveIcon } from "@mui/icons-material";
 import type { Point } from "./MapboxMap";
 import CancelDialog from "./CancelDialog";
+import { savePoint } from "../firebase/points";
 
 interface PointFormProps {
   point: Point;
@@ -11,9 +12,45 @@ interface PointFormProps {
 
 const PointForm = ({ point, onConfirmDelete }: PointFormProps) => {
   const [openDialog, setOpenDialog] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(point.imageUrl || null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [category, setCategory] = useState<string>(point.category || "");
+  const [status, setStatus] = useState<string>(point.status || "");
+  const [comments, setComments] = useState<string>(point.comments || "");
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [showSuccessSnackbar, setShowSuccessSnackbar] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Determinar si el punto ya está guardado (tiene pointStatus)
+  const isSavedPoint = !!point.pointStatus;
+
+  const categories = [
+    { value: "RAMPA", label: "Rampa" },
+    { value: "BANO", label: "Baño" },
+    { value: "ASCENSOR", label: "Ascensor" },
+    { value: "ESTACIONAMIENTO", label: "Estacionamiento" },
+    { value: "SENALIZACION", label: "Señalización" },
+    { value: "PUERTA", label: "Puerta" },
+    { value: "TRANSPORTE", label: "Transporte" },
+    { value: "OTRO", label: "Otro" },
+  ];
+
+  const statusOptions = [
+    { value: "BUENO", label: "Bueno", color: "#4caf50" },
+    { value: "REGULAR", label: "Regular", color: "#ff9800" },
+    { value: "MALO", label: "Malo", color: "#f44336" },
+  ];
 
   const handleCloseClick = () => {
-    setOpenDialog(true);
+    // Si el punto ya está guardado, cerrar directamente sin diálogo
+    if (isSavedPoint) {
+      onConfirmDelete();
+    } else {
+      // Si es un punto nuevo, mostrar el diálogo de confirmación
+      setOpenDialog(true);
+    }
   };
 
   const handleCancelDialog = () => {
@@ -23,6 +60,93 @@ const PointForm = ({ point, onConfirmDelete }: PointFormProps) => {
   const handleConfirmDelete = () => {
     setOpenDialog(false);
     onConfirmDelete();
+  };
+
+  const handleFileSelect = (file: File) => {
+    if (file && file.type.startsWith("image/")) {
+      setImageFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSave = async () => {
+    // Validar campos requeridos
+    if (!category) {
+      setSaveError("Por favor selecciona una categoría");
+      return;
+    }
+    if (!status) {
+      setSaveError("Por favor selecciona un estado");
+      return;
+    }
+
+    setIsSaving(true);
+    setSaveError(null);
+
+    try {
+      await savePoint(
+        { lat: point.lat, lng: point.lng },
+        category,
+        status,
+        comments,
+        imageFile
+      );
+      
+      // Mostrar mensaje de éxito
+      setShowSuccessSnackbar(true);
+      
+      // Cerrar el formulario después de 2 segundos
+      setTimeout(() => {
+        onConfirmDelete();
+      }, 2000);
+    } catch (error) {
+      console.error("Error al guardar:", error);
+      setSaveError(error instanceof Error ? error.message : "Error al guardar el punto");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleFileSelect(file);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) {
+      handleFileSelect(file);
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setImageFile(null);
+    setImagePreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const handleClickUpload = () => {
+    fileInputRef.current?.click();
   };
   return (
     <Box
@@ -48,16 +172,192 @@ const PointForm = ({ point, onConfirmDelete }: PointFormProps) => {
             </IconButton>
           }
         />
-        <CardContent>
-          <Box sx={{ mb: 2 }}>
-            <strong>Coordenadas:</strong>
-            <div>Latitud: {point.lat.toFixed(6)}</div>
-            <div>Longitud: {point.lng.toFixed(6)}</div>
+        <CardContent sx={{ p: 2, maxHeight: "70vh", overflowY: "auto" }}>
+          <Box sx={{ mb: 1.5 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 0.5, fontSize: "0.875rem" }}>
+              Coordenadas:
+            </Typography>
+            <Typography variant="body2" sx={{ fontSize: "0.8rem" }}>Latitud: {point.lat.toFixed(6)}</Typography>
+            <Typography variant="body2" sx={{ fontSize: "0.8rem" }}>Longitud: {point.lng.toFixed(6)}</Typography>
           </Box>
-          {/* Aquí se agregarán los campos del formulario más adelante */}
+
           <Box sx={{ mt: 2 }}>
-            <em>Los campos del formulario se agregarán aquí...</em>
+            <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 0.5, fontSize: "0.875rem" }}>
+              Foto:
+            </Typography>
+            <input
+              type="file"
+              accept="image/*"
+              ref={fileInputRef}
+              onChange={handleFileInputChange}
+              style={{ display: "none" }}
+            />
+            
+            {imagePreview ? (
+              <Box
+                sx={{
+                  position: "relative",
+                  width: "100%",
+                  mb: 2,
+                }}
+              >
+                <Box
+                  component="img"
+                  src={imagePreview}
+                  alt="Preview"
+                  sx={{
+                    width: "100%",
+                    maxHeight: "180px",
+                    objectFit: "cover",
+                    borderRadius: 1,
+                    border: "1px solid #e0e0e0",
+                  }}
+                />
+                <IconButton
+                  onClick={handleRemoveImage}
+                  sx={{
+                    position: "absolute",
+                    top: 8,
+                    right: 8,
+                    backgroundColor: "rgba(255, 255, 255, 0.9)",
+                    "&:hover": {
+                      backgroundColor: "rgba(255, 255, 255, 1)",
+                    },
+                  }}
+                  size="small"
+                >
+                  <DeleteIcon />
+                </IconButton>
+              </Box>
+            ) : !isSavedPoint && (
+              <Box
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={handleClickUpload}
+                sx={{
+                  border: `2px dashed ${isDragging ? "#3b82f6" : "#e0e0e0"}`,
+                  borderRadius: 1,
+                  p: 3,
+                  textAlign: "center",
+                  minHeight: "150px",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  cursor: "pointer",
+                  backgroundColor: isDragging ? "#f0f7ff" : "#fafafa",
+                  transition: "all 0.2s ease",
+                  "&:hover": {
+                    borderColor: "#3b82f6",
+                    backgroundColor: "#f0f7ff",
+                  },
+                }}
+              >
+                <CloudUploadIcon sx={{ fontSize: 48, color: "#9ca3af", mb: 1 }} />
+                <Typography variant="body2" sx={{ color: "#6b7280", mb: 0.5, fontSize: "0.85rem" }}>
+                  Arrastra una imagen aquí o haz clic para seleccionar
+                </Typography>
+                <Typography variant="caption" sx={{ color: "#9ca3af", fontSize: "0.75rem" }}>
+                  PNG, JPG, GIF hasta 10MB
+                </Typography>
+              </Box>
+            )}
           </Box>
+
+          <Box sx={{ mt: 2, display: "flex", gap: 2 }}>
+            <FormControl size="small" sx={{ flex: 1 }} disabled={isSavedPoint}>
+              <InputLabel id="category-select-label">Categoría</InputLabel>
+              <Select
+                labelId="category-select-label"
+                id="category-select"
+                value={category}
+                label="Categoría"
+                onChange={(e) => setCategory(e.target.value)}
+              >
+                {categories.map((cat) => (
+                  <MenuItem key={cat.value} value={cat.value}>
+                    {cat.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <FormControl size="small" sx={{ flex: 1 }} disabled={isSavedPoint}>
+              <InputLabel id="status-select-label">Estado</InputLabel>
+              <Select
+                labelId="status-select-label"
+                id="status-select"
+                value={status}
+                label="Estado"
+                onChange={(e) => setStatus(e.target.value)}
+                sx={{
+                  "& .MuiSelect-select": {
+                    color: statusOptions.find((s) => s.value === status)?.color || "inherit",
+                    fontWeight: 500,
+                  },
+                  "&.Mui-disabled .MuiSelect-select": {
+                    color: statusOptions.find((s) => s.value === status)?.color || "inherit",
+                    WebkitTextFillColor: statusOptions.find((s) => s.value === status)?.color || "inherit",
+                  },
+                }}
+              >
+                {statusOptions.map((statusOption) => (
+                  <MenuItem key={statusOption.value} value={statusOption.value}>
+                    <Box sx={{ color: statusOption.color, fontWeight: 500 }}>
+                      {statusOption.label}
+                    </Box>
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
+
+          <Box sx={{ mt: 2 }}>
+            <TextField
+              fullWidth
+              size="small"
+              id="comments-field"
+              label="Comentarios"
+              placeholder="Agrega comentarios adicionales (opcional)"
+              multiline
+              rows={3}
+              value={comments}
+              onChange={(e) => setComments(e.target.value)}
+              variant="outlined"
+              disabled={isSavedPoint}
+            />
+          </Box>
+
+          {saveError && (
+            <Box sx={{ mt: 2 }}>
+              <Alert severity="error" onClose={() => setSaveError(null)}>
+                {saveError}
+              </Alert>
+            </Box>
+          )}
+
+          {!isSavedPoint && (
+            <Box sx={{ mt: 2, display: "flex", justifyContent: "flex-end" }}>
+              <Button
+                variant="contained"
+                startIcon={isSaving ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
+                onClick={handleSave}
+                disabled={isSaving}
+                sx={{
+                  backgroundColor: "#3b82f6",
+                  "&:hover": {
+                    backgroundColor: "#2563eb",
+                  },
+                  "&:disabled": {
+                    backgroundColor: "#9ca3af",
+                  },
+                }}
+              >
+                {isSaving ? "Guardando..." : "Guardar"}
+              </Button>
+            </Box>
+          )}
         </CardContent>
       </Card>
 
@@ -66,6 +366,21 @@ const PointForm = ({ point, onConfirmDelete }: PointFormProps) => {
         onClose={handleCancelDialog}
         onConfirm={handleConfirmDelete}
       />
+
+      <Snackbar
+        open={showSuccessSnackbar}
+        autoHideDuration={2000}
+        onClose={() => setShowSuccessSnackbar(false)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert 
+          onClose={() => setShowSuccessSnackbar(false)} 
+          severity="success" 
+          sx={{ width: '100%' }}
+        >
+          Punto guardado exitosamente
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

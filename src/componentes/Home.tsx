@@ -11,6 +11,13 @@ const Home = () => {
     setSelectedPoint(point)
   }
 
+  const handlePointUpdated = (updatedPoint: Point) => {
+    // Actualizar el punto seleccionado con las nuevas coordenadas
+    if (selectedPoint && selectedPoint.id === updatedPoint.id) {
+      setSelectedPoint(updatedPoint)
+    }
+  }
+
   const handleRemovePoint = (pointId: string) => {
     // Llamar a la función global para eliminar el punto del mapa
     interface WindowWithRemovePoint extends Window {
@@ -34,7 +41,8 @@ const Home = () => {
       <NavBar />
       <div className="map-wrapper" style={{ position: 'relative' }}>
         <MapboxMap 
-          onPointAdded={handlePointAdded} 
+          onPointAdded={handlePointAdded}
+          onPointUpdated={handlePointUpdated}
           isFormOpen={!!selectedPoint}
         />
         {selectedPoint && (
