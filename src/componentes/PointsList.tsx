@@ -1,15 +1,28 @@
 import { useEffect, useState } from 'react';
 import { Box, Card, CardContent, Typography, Avatar, Chip, CircularProgress, Alert, IconButton, Tooltip } from '@mui/material';
-import { LocationOn as LocationIcon, ChevronLeft as ChevronLeftIcon, ChevronRight as ChevronRightIcon, Bookmark as BookmarkIcon } from '@mui/icons-material';
+import { LocationOn as LocationIcon, ChevronLeft as ChevronLeftIcon, Bookmark as BookmarkIcon } from '@mui/icons-material';
 import type { Point } from './MapboxMap';
-import { getSavedPoints } from '../firebase/points';
 import type { PointData } from '../firebase/points';
 
-interface SavedPointsListProps {
+interface PointsListProps {
+  title: string;
+  fetchPoints: () => Promise<(PointData & { id: string })[]>;
   onPointClick: (point: Point) => void;
+  showPointStatus?: boolean;
+  icon?: React.ReactNode;
+  emptyMessage?: string;
+  tooltipTitle?: string;
 }
 
-const SavedPointsList = ({ onPointClick }: SavedPointsListProps) => {
+const PointsList = ({ 
+  title, 
+  fetchPoints, 
+  onPointClick, 
+  showPointStatus = false,
+  icon = <BookmarkIcon sx={{ color: '#3b82f6', fontSize: '24px' }} />,
+  emptyMessage = 'No hay puntos disponibles',
+  tooltipTitle
+}: PointsListProps) => {
   const [points, setPoints] = useState<(PointData & { id: string })[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -20,18 +33,18 @@ const SavedPointsList = ({ onPointClick }: SavedPointsListProps) => {
       setLoading(true);
       setError(null);
       try {
-        const savedPoints = await getSavedPoints();
-        setPoints(savedPoints);
+        const loadedPoints = await fetchPoints();
+        setPoints(loadedPoints);
       } catch (err) {
-        console.error('Error al cargar puntos guardados:', err);
-        setError(err instanceof Error ? err.message : 'Error al cargar los puntos guardados');
+        console.error(`Error al cargar ${title.toLowerCase()}:`, err);
+        setError(err instanceof Error ? err.message : `Error al cargar ${title.toLowerCase()}`);
       } finally {
         setLoading(false);
       }
     };
 
     loadPoints();
-  }, []);
+  }, [fetchPoints, title]);
 
   const getStatusColor = (status?: string) => {
     switch (status) {
@@ -54,6 +67,32 @@ const SavedPointsList = ({ onPointClick }: SavedPointsListProps) => {
         return 'Regular';
       case 'MALO':
         return 'Malo';
+      default:
+        return 'Sin estado';
+    }
+  };
+
+  const getPointStatusColor = (pointStatus?: string) => {
+    switch (pointStatus) {
+      case 'PENDIENTE':
+        return '#ff9800';
+      case 'APROBADO':
+        return '#4caf50';
+      case 'RECHAZADO':
+        return '#f44336';
+      default:
+        return '#9ca3af';
+    }
+  };
+
+  const getPointStatusLabel = (pointStatus?: string) => {
+    switch (pointStatus) {
+      case 'PENDIENTE':
+        return 'Pendiente';
+      case 'APROBADO':
+        return 'Aprobado';
+      case 'RECHAZADO':
+        return 'Rechazado';
       default:
         return 'Sin estado';
     }
@@ -95,7 +134,7 @@ const SavedPointsList = ({ onPointClick }: SavedPointsListProps) => {
   // Si está minimizado, mostrar solo el icono
   if (isMinimized) {
     return (
-      <Tooltip title="Mostrar puntos guardados" arrow>
+      <Tooltip title={tooltipTitle || `Mostrar ${title.toLowerCase()}`} arrow>
         <Box
           onClick={handleToggleMinimize}
           sx={{
@@ -120,7 +159,7 @@ const SavedPointsList = ({ onPointClick }: SavedPointsListProps) => {
             },
           }}
         >
-          <BookmarkIcon sx={{ color: '#3b82f6', fontSize: '24px' }} />
+          {icon}
         </Box>
       </Tooltip>
     );
@@ -135,6 +174,7 @@ const SavedPointsList = ({ onPointClick }: SavedPointsListProps) => {
         top: '80px',
         width: '350px',
         maxWidth: 'calc(100vw - 40px)',
+        height: 'calc(100vh - 100px)',
         maxHeight: 'calc(100vh - 100px)',
         zIndex: 1000,
         backgroundColor: 'white',
@@ -143,8 +183,12 @@ const SavedPointsList = ({ onPointClick }: SavedPointsListProps) => {
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
+        boxSizing: 'border-box',
+        // Asegurar que el contenedor tenga altura definida
+        minHeight: 0,
       }}
     >
+      {/* Header fijo */}
       <Box
         sx={{
           p: 2,
@@ -153,11 +197,13 @@ const SavedPointsList = ({ onPointClick }: SavedPointsListProps) => {
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
+          flexShrink: 0,
+          minHeight: '73px',
         }}
       >
         <Box sx={{ flex: 1 }}>
           <Typography variant="h6" sx={{ fontWeight: 'bold', fontSize: '1.1rem' }}>
-            Puntos Guardados
+            {title}
           </Typography>
           <Typography variant="caption" sx={{ color: '#666', fontSize: '0.85rem' }}>
             {points.length} {points.length === 1 ? 'punto' : 'puntos'}
@@ -179,11 +225,34 @@ const SavedPointsList = ({ onPointClick }: SavedPointsListProps) => {
         </Tooltip>
       </Box>
 
+      {/* Contenedor scrolleable */}
       <Box
+        component="div"
         sx={{
-          flex: 1,
+          flex: '1 1 0%',
+          minHeight: 0,
+          height: 0,
           overflowY: 'auto',
+          overflowX: 'hidden',
           p: 1,
+          WebkitOverflowScrolling: 'touch',
+          scrollbarWidth: 'thin',
+          scrollbarColor: '#888 #f1f1f1',
+          '&::-webkit-scrollbar': {
+            width: '8px',
+            display: 'block',
+          },
+          '&::-webkit-scrollbar-track': {
+            backgroundColor: '#f1f1f1',
+            borderRadius: '4px',
+          },
+          '&::-webkit-scrollbar-thumb': {
+            backgroundColor: '#888',
+            borderRadius: '4px',
+            '&:hover': {
+              backgroundColor: '#555',
+            },
+          },
         }}
       >
         {loading && (
@@ -203,13 +272,13 @@ const SavedPointsList = ({ onPointClick }: SavedPointsListProps) => {
         {!loading && !error && points.length === 0 && (
           <Box sx={{ p: 3, textAlign: 'center' }}>
             <Typography variant="body2" sx={{ color: '#666' }}>
-              No tienes puntos guardados aún
+              {emptyMessage}
             </Typography>
           </Box>
         )}
 
         {!loading && !error && points.length > 0 && (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, width: '100%', pb: 4, mb: 1 }}>
             {points.map((point) => (
               <Card
                 key={point.id}
@@ -279,6 +348,19 @@ const SavedPointsList = ({ onPointClick }: SavedPointsListProps) => {
                             fontWeight: 500,
                           }}
                         />
+                        {showPointStatus && (
+                          <Chip
+                            label={getPointStatusLabel(point.pointStatus)}
+                            size="small"
+                            sx={{
+                              height: 20,
+                              fontSize: '0.7rem',
+                              backgroundColor: getPointStatusColor(point.pointStatus),
+                              color: 'white',
+                              fontWeight: 500,
+                            }}
+                          />
+                        )}
                       </Box>
 
                       {point.comments && (
@@ -322,5 +404,5 @@ const SavedPointsList = ({ onPointClick }: SavedPointsListProps) => {
   );
 };
 
-export default SavedPointsList;
+export default PointsList;
 

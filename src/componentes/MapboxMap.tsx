@@ -4,7 +4,7 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import { onAuthChange, getCurrentUser } from "../firebase/auth";
 import type { User } from "firebase/auth";
 import { Tooltip, Button } from "@mui/material";
-import { getPoints, getSavedPoints } from "../firebase/points";
+import { getPoints, getSavedPoints, getMyPoints } from "../firebase/points";
 
 export interface Point {
   id: string;
@@ -24,21 +24,24 @@ interface MapboxMapProps {
   onPointUpdated?: (point: Point) => void;
   isFormOpen?: boolean;
   showOnlySavedPoints?: boolean;
+  showOnlyMyPoints?: boolean;
 }
 
-const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = false, showOnlySavedPoints = false }: MapboxMapProps) => {
+const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = false, showOnlySavedPoints = false, showOnlyMyPoints = false }: MapboxMapProps) => {
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
   const pointsMapRef = useRef<Map<string, mapboxgl.Marker>>(new Map());
   const onPointUpdatedRef = useRef(onPointUpdated);
+  const onPointAddedRef = useRef(onPointAdded);
   const [isAddingPoint, setIsAddingPoint] = useState(false);
   const [user, setUser] = useState<User | null>(null);
 
-  // Mantener la referencia actualizada
+  // Mantener las referencias actualizadas
   useEffect(() => {
     onPointUpdatedRef.current = onPointUpdated;
-  }, [onPointUpdated]);
+    onPointAddedRef.current = onPointAdded;
+  }, [onPointUpdated, onPointAdded]);
 
   // Verificar estado de autenticación
   useEffect(() => {
@@ -128,8 +131,8 @@ const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = f
     if (isSavedPoint) {
       el.addEventListener("click", (e) => {
         e.stopPropagation(); // Evitar que el click se propague al mapa
-        if (onPointAdded) {
-          onPointAdded(point);
+        if (onPointAddedRef.current) {
+          onPointAddedRef.current(point);
         }
       });
     } else {
@@ -156,7 +159,7 @@ const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = f
 
     markersRef.current.push(marker);
     pointsMapRef.current.set(point.id, marker);
-  }, [onPointAdded]);
+  }, []);
 
   // Función para limpiar solo los marcadores guardados (no los puntos nuevos)
   const clearSavedMarkers = useCallback(() => {
@@ -199,6 +202,9 @@ const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = f
         if (showOnlySavedPoints && user) {
           // Cargar solo los puntos guardados del usuario
           pointsToLoad = await getSavedPoints();
+        } else if (showOnlyMyPoints && user) {
+          // Cargar solo los puntos creados por el usuario
+          pointsToLoad = await getMyPoints();
         } else {
           // Cargar todos los puntos
           pointsToLoad = await getPoints();
@@ -232,7 +238,8 @@ const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = f
     } else {
       mapRef.current.once("load", loadPoints);
     }
-  }, [showOnlySavedPoints, user, clearSavedMarkers, addPointToMap]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showOnlySavedPoints, showOnlyMyPoints, user]);
 
   // Exponer la función de eliminación
   useEffect(() => {
@@ -279,8 +286,8 @@ const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = f
         addPointToMap(newPoint);
         setIsAddingPoint(false);
         // Notificar al componente padre que se agregó un punto
-        if (onPointAdded) {
-          onPointAdded(newPoint);
+        if (onPointAddedRef.current) {
+          onPointAddedRef.current(newPoint);
         }
       }
     };
