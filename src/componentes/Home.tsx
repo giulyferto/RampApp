@@ -2,10 +2,12 @@ import { useState } from 'react'
 import MapboxMap, { type Point } from './MapboxMap'
 import NavBar from './NavBar'
 import PointForm from './PointForm'
+import SavedPointsList from './SavedPointsList'
 import './Home.css'
 
 const Home = () => {
   const [selectedPoint, setSelectedPoint] = useState<Point | null>(null)
+  const [showOnlySavedPoints, setShowOnlySavedPoints] = useState(false)
 
   const handlePointAdded = (point: Point) => {
     setSelectedPoint(point)
@@ -36,15 +38,31 @@ const Home = () => {
     }
   }
 
+  const handleShowSavedPoints = () => {
+    setShowOnlySavedPoints(true)
+  }
+
+  const handleShowAllPoints = () => {
+    setShowOnlySavedPoints(false)
+  }
+
   return (
     <div className="home-container">
-      <NavBar />
+      <NavBar 
+        onShowSavedPoints={handleShowSavedPoints}
+        onShowAllPoints={handleShowAllPoints}
+        showOnlySavedPoints={showOnlySavedPoints}
+      />
       <div className="map-wrapper" style={{ position: 'relative' }}>
         <MapboxMap 
           onPointAdded={handlePointAdded}
           onPointUpdated={handlePointUpdated}
           isFormOpen={!!selectedPoint}
+          showOnlySavedPoints={showOnlySavedPoints}
         />
+        {showOnlySavedPoints && (
+          <SavedPointsList onPointClick={handlePointAdded} />
+        )}
         {selectedPoint && (
           <PointForm 
             point={selectedPoint} 

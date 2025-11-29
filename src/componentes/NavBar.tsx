@@ -4,7 +4,13 @@ import type { User } from 'firebase/auth';
 import logo from '../assets/LogoRampApp.svg';
 import './Home.css';
 
-const NavBar = () => {
+interface NavBarProps {
+  onShowSavedPoints?: () => void;
+  onShowAllPoints?: () => void;
+  showOnlySavedPoints?: boolean;
+}
+
+const NavBar = ({ onShowSavedPoints, onShowAllPoints, showOnlySavedPoints = false }: NavBarProps) => {
   const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
@@ -38,6 +44,26 @@ const NavBar = () => {
     }
   };
 
+  const handleSavedPointsClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    if (showOnlySavedPoints && onShowAllPoints) {
+      onShowAllPoints();
+    } else if (onShowSavedPoints) {
+      onShowSavedPoints();
+    }
+  };
+
+  const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+  };
+
+  const handleInicioClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    if (showOnlySavedPoints && onShowAllPoints) {
+      onShowAllPoints();
+    }
+  };
+
   return (
     <nav className="navbar">
       <div className="navbar-content">
@@ -46,18 +72,34 @@ const NavBar = () => {
           <h1 className="navbar-title">RampApp</h1>
         </div>
         <ul className="navbar-menu">
-          <li><a href="#inicio" className="navbar-link active">Inicio</a></li>
+          <li>
+            <a 
+              href="/" 
+              className={`navbar-link ${!showOnlySavedPoints ? 'active' : ''}`}
+              onClick={handleInicioClick}
+            >
+              Inicio
+            </a>
+          </li>
           {user && (
             <>
-              <li><a href="#mapa" className="navbar-link">Puntos guardados</a></li>
-              <li><a href="#acerca" className="navbar-link">Mis puntos</a></li>
+              <li>
+                <a 
+                  href="/" 
+                  className={`navbar-link ${showOnlySavedPoints ? 'active' : ''}`}
+                  onClick={handleSavedPointsClick}
+                >
+                  Puntos guardados
+                </a>
+              </li>
+              <li><a href="/" className="navbar-link" onClick={handleLinkClick}>Mis puntos</a></li>
             </>
           )}
-          <li><a href="#info" className="navbar-link">Info útil</a></li>
+          <li><a href="/" className="navbar-link" onClick={handleLinkClick}>Info útil</a></li>
           {user ? (
-            <li><a href="#logout" className="navbar-link" onClick={handleLogout}>Cerrar sesión</a></li>
+            <li><a href="/" className="navbar-link" onClick={handleLogout}>Cerrar sesión</a></li>
           ) : (
-            <li><a href="#login" className="navbar-link" onClick={handleLogin}>Login</a></li>
+            <li><a href="/" className="navbar-link" onClick={handleLogin}>Login</a></li>
           )}
         </ul>
       </div>

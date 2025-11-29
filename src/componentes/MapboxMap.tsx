@@ -4,7 +4,7 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import { onAuthChange, getCurrentUser } from "../firebase/auth";
 import type { User } from "firebase/auth";
 import { Tooltip, Button } from "@mui/material";
-import { getPoints } from "../firebase/points";
+import { getPoints, getSavedPoints } from "../firebase/points";
 
 export interface Point {
   id: string;
@@ -23,9 +23,10 @@ interface MapboxMapProps {
   onRemovePoint?: (pointId: string) => void;
   onPointUpdated?: (point: Point) => void;
   isFormOpen?: boolean;
+  showOnlySavedPoints?: boolean;
 }
 
-const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = false }: MapboxMapProps) => {
+const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = false, showOnlySavedPoints = false }: MapboxMapProps) => {
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
@@ -85,8 +86,21 @@ const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = f
     }
   }, [isAddingPoint]);
 
+  // Mantener un registro de puntos nuevos (sin pointStatus) para preservarlos
+  const newPointsRef = useRef<Set<string>>(new Set());
+
   const addPointToMap = useCallback((point: Point, isSavedPoint = false) => {
     if (!mapRef.current) return;
+
+    // Si el punto ya existe, no agregarlo de nuevo
+    if (pointsMapRef.current.has(point.id)) {
+      return;
+    }
+
+    // Si es un punto nuevo (sin pointStatus), agregarlo al registro
+    if (!isSavedPoint && !point.pointStatus) {
+      newPointsRef.current.add(point.id);
+    }
 
     // Crear un elemento HTML personalizado para el marcador con emoji
     const el = document.createElement("div");
@@ -144,26 +158,68 @@ const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = f
     pointsMapRef.current.set(point.id, marker);
   }, [onPointAdded]);
 
-  // Cargar puntos guardados cuando el mapa esté listo
+  // Función para limpiar solo los marcadores guardados (no los puntos nuevos)
+  const clearSavedMarkers = useCallback(() => {
+    // Solo eliminar marcadores que NO son puntos nuevos
+    const markersToRemove: mapboxgl.Marker[] = [];
+    const pointIdsToRemove: string[] = [];
+    
+    pointsMapRef.current.forEach((marker, pointId) => {
+      // Preservar los puntos nuevos (que están en newPointsRef)
+      if (!newPointsRef.current.has(pointId)) {
+        markersToRemove.push(marker);
+        pointIdsToRemove.push(pointId);
+      }
+    });
+
+    markersToRemove.forEach((marker) => {
+      marker.remove();
+      const index = markersRef.current.indexOf(marker);
+      if (index > -1) {
+        markersRef.current.splice(index, 1);
+      }
+    });
+
+    pointIdsToRemove.forEach((pointId) => {
+      pointsMapRef.current.delete(pointId);
+    });
+  }, []);
+
+  // Cargar puntos según el modo (todos o solo guardados)
   useEffect(() => {
     if (!mapRef.current) return;
 
-    const loadSavedPoints = async () => {
+    const loadPoints = async () => {
+      // Limpiar solo los marcadores guardados, preservando los puntos nuevos
+      clearSavedMarkers();
+
       try {
-        const savedPoints = await getPoints();
-        savedPoints.forEach((pointData) => {
-          const point: Point = {
-            id: pointData.id,
-            lng: pointData.lng,
-            lat: pointData.lat,
-            category: pointData.category,
-            status: pointData.status,
-            comments: pointData.comments,
-            imageUrl: pointData.imageUrl,
-            userId: pointData.userId,
-            pointStatus: pointData.pointStatus,
-          };
-          addPointToMap(point, true); // true indica que es un punto guardado
+        let pointsToLoad;
+        
+        if (showOnlySavedPoints && user) {
+          // Cargar solo los puntos guardados del usuario
+          pointsToLoad = await getSavedPoints();
+        } else {
+          // Cargar todos los puntos
+          pointsToLoad = await getPoints();
+        }
+
+        pointsToLoad.forEach((pointData) => {
+          // Verificar si el punto ya existe en el mapa (para evitar duplicados)
+          if (!pointsMapRef.current.has(pointData.id)) {
+            const point: Point = {
+              id: pointData.id,
+              lng: pointData.lng,
+              lat: pointData.lat,
+              category: pointData.category,
+              status: pointData.status,
+              comments: pointData.comments,
+              imageUrl: pointData.imageUrl,
+              userId: pointData.userId,
+              pointStatus: pointData.pointStatus,
+            };
+            addPointToMap(point, true); // true indica que es un punto guardado
+          }
         });
       } catch (error) {
         console.error("Error al cargar puntos:", error);
@@ -172,11 +228,11 @@ const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = f
 
     // Esperar a que el mapa esté listo
     if (mapRef.current.loaded()) {
-      loadSavedPoints();
+      loadPoints();
     } else {
-      mapRef.current.once("load", loadSavedPoints);
+      mapRef.current.once("load", loadPoints);
     }
-  }, [addPointToMap]);
+  }, [showOnlySavedPoints, user, clearSavedMarkers, addPointToMap]);
 
   // Exponer la función de eliminación
   useEffect(() => {
@@ -190,6 +246,8 @@ const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = f
       if (marker) {
         marker.remove();
         pointsMapRef.current.delete(pointId);
+        // Remover del registro de puntos nuevos también
+        newPointsRef.current.delete(pointId);
         // Remover del array de marcadores también
         const index = markersRef.current.indexOf(marker);
         if (index > -1) {

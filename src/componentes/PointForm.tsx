@@ -1,9 +1,10 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, IconButton, Box, Typography, FormControl, InputLabel, Select, MenuItem, TextField, Button, Alert, CircularProgress, Snackbar } from "@mui/material";
 import { Close as CloseIcon, CloudUpload as CloudUploadIcon, Delete as DeleteIcon, Save as SaveIcon } from "@mui/icons-material";
 import type { Point } from "./MapboxMap";
 import CancelDialog from "./CancelDialog";
-import { savePoint } from "../firebase/points";
+import { savePoint, isPointSaved, savePointToFavorites, removePointFromFavorites } from "../firebase/points";
+import { getCurrentUser } from "../firebase/auth";
 
 interface PointFormProps {
   point: Point;
@@ -21,10 +22,35 @@ const PointForm = ({ point, onConfirmDelete }: PointFormProps) => {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [showSuccessSnackbar, setShowSuccessSnackbar] = useState(false);
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [isCheckingFavorite, setIsCheckingFavorite] = useState(false);
+  const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Determinar si el punto ya está guardado (tiene pointStatus)
   const isSavedPoint = !!point.pointStatus;
+  
+  // Verificar si el usuario está logueado
+  const user = getCurrentUser();
+  
+  // Verificar si el punto está guardado en favoritos cuando está en modo read-only
+  useEffect(() => {
+    const checkFavoriteStatus = async () => {
+      if (isSavedPoint && user && point.id) {
+        setIsCheckingFavorite(true);
+        try {
+          const saved = await isPointSaved(point.id);
+          setIsFavorite(saved);
+        } catch (error) {
+          console.error("Error al verificar favorito:", error);
+        } finally {
+          setIsCheckingFavorite(false);
+        }
+      }
+    };
+    
+    checkFavoriteStatus();
+  }, [isSavedPoint, user, point.id]);
 
   const categories = [
     { value: "RAMPA", label: "Rampa" },
@@ -148,6 +174,27 @@ const PointForm = ({ point, onConfirmDelete }: PointFormProps) => {
   const handleClickUpload = () => {
     fileInputRef.current?.click();
   };
+
+  const handleToggleFavorite = async () => {
+    if (!user || !point.id || isTogglingFavorite) return;
+
+    setIsTogglingFavorite(true);
+    try {
+      if (isFavorite) {
+        await removePointFromFavorites(point.id);
+        setIsFavorite(false);
+      } else {
+        await savePointToFavorites(point.id);
+        setIsFavorite(true);
+      }
+    } catch (error) {
+      console.error("Error al cambiar favorito:", error);
+      setSaveError(error instanceof Error ? error.message : "Error al cambiar favorito");
+    } finally {
+      setIsTogglingFavorite(false);
+    }
+  };
+
   return (
     <Box
       sx={{
@@ -161,7 +208,45 @@ const PointForm = ({ point, onConfirmDelete }: PointFormProps) => {
     >
       <Card>
         <CardHeader
-          title="Información del Punto"
+          title={
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <Typography variant="h6" component="span">
+                Información del Punto
+              </Typography>
+              {isSavedPoint && user && point.id && (
+                <IconButton
+                  onClick={handleToggleFavorite}
+                  disabled={isTogglingFavorite || isCheckingFavorite}
+                  size="small"
+                  sx={{
+                    p: 0.5,
+                    color: isFavorite ? "#ff6b6b" : "#9ca3af",
+                    transition: "color 0.2s ease",
+                    "&:hover": {
+                      color: isFavorite ? "#ff5252" : "#ff6b6b",
+                      backgroundColor: "transparent",
+                    },
+                    "&:disabled": {
+                      color: isFavorite ? "#ff6b6b" : "#9ca3af",
+                    },
+                  }}
+                  aria-label={isFavorite ? "Quitar de favoritos" : "Agregar a favoritos"}
+                >
+                  <Typography
+                    component="span"
+                    sx={{
+                      fontSize: "1.5rem",
+                      lineHeight: 1,
+                      filter: isFavorite ? "none" : "grayscale(100%)",
+                      transition: "filter 0.2s ease",
+                    }}
+                  >
+                    {isTogglingFavorite ? "⏳" : "⭐"}
+                  </Typography>
+                </IconButton>
+              )}
+            </Box>
+          }
           action={
             <IconButton
               aria-label="cerrar"
