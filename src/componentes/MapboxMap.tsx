@@ -7,7 +7,7 @@ import { Tooltip, Button } from "@mui/material";
 import { getPoints, getSavedPoints, getMyPoints, getPendingPoints } from "../firebase/points";
 import type { Point, MapboxMapProps } from "../types";
 
-const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = false, showOnlySavedPoints = false, showOnlyMyPoints = false, showPendingPoints = false, savedPointsRefreshKey, mapRefreshKey }: MapboxMapProps) => {
+const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = false, showOnlySavedPoints = false, showOnlyMyPoints = false, showPendingPoints = false, savedPointsRefreshKey, mapRefreshKey, selectedCategory = '', selectedStatus = '' }: MapboxMapProps) => {
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
@@ -193,7 +193,20 @@ const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = f
           pointsToLoad = await getPoints();
         }
 
-        pointsToLoad.forEach((pointData) => {
+        // Filtrar puntos según los filtros seleccionados
+        const filteredPoints = pointsToLoad.filter((pointData) => {
+          // Filtrar por categoría si está seleccionada
+          if (selectedCategory && pointData.category !== selectedCategory) {
+            return false;
+          }
+          // Filtrar por estado si está seleccionado
+          if (selectedStatus && pointData.status !== selectedStatus) {
+            return false;
+          }
+          return true;
+        });
+
+        filteredPoints.forEach((pointData) => {
           // Verificar si el punto ya existe en el mapa (para evitar duplicados)
           if (!pointsMapRef.current.has(pointData.id)) {
             const point: Point = {
@@ -222,7 +235,7 @@ const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = f
       mapRef.current.once("load", loadPoints);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showOnlySavedPoints, showOnlyMyPoints, showPendingPoints, user, savedPointsRefreshKey, mapRefreshKey]);
+  }, [showOnlySavedPoints, showOnlyMyPoints, showPendingPoints, user, savedPointsRefreshKey, mapRefreshKey, selectedCategory, selectedStatus]);
 
   // Exponer la función de eliminación
   useEffect(() => {
