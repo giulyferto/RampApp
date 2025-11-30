@@ -1,4 +1,4 @@
-import { collection, addDoc, Timestamp, getDocs, query, orderBy, where, deleteDoc, doc, getDoc } from 'firebase/firestore';
+import { collection, addDoc, Timestamp, getDocs, query, orderBy, where, deleteDoc, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from './config';
 import { getCurrentUser } from './auth';
@@ -85,17 +85,111 @@ export const savePoint = async (
   }
 };
 
+/**
+ * Obtener todos los puntos APROBADOS (para mostrar en el mapa principal)
+ * Solo se muestran puntos aprobados para todos los usuarios
+ * @returns Lista de puntos aprobados ordenados por fecha de creación
+ */
 export const getPoints = async (): Promise<PointWithId[]> => {
   try {
-    const q = query(collection(db, 'punto'), orderBy('createdAt', 'desc'));
+    const q = query(
+      collection(db, 'punto'),
+      where('pointStatus', '==', 'APROBADO'),
+      orderBy('createdAt', 'desc')
+    );
     const querySnapshot = await getDocs(q);
     
     return querySnapshot.docs.map((doc) => ({
       id: doc.id,
       ...(doc.data() as PointData),
     }));
-  } catch {
-    throw new Error('Error al obtener los puntos');
+  } catch (error) {
+    // Si el error es por falta de índice, intentar sin orderBy y ordenar en el cliente
+    if (error instanceof Error && error.message.includes('index')) {
+      try {
+        const q = query(
+          collection(db, 'punto'),
+          where('pointStatus', '==', 'APROBADO')
+        );
+        const querySnapshot = await getDocs(q);
+        
+        const points = querySnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...(doc.data() as PointData),
+        }));
+        
+        // Ordenar por fecha de creación en el cliente (más recientes primero)
+        return points.sort((a, b) => {
+          const aTime = a.createdAt?.toMillis() || 0;
+          const bTime = b.createdAt?.toMillis() || 0;
+          return bTime - aTime;
+        });
+      } catch (fallbackError) {
+        console.error('Error al obtener puntos aprobados (fallback):', fallbackError);
+        throw new Error('Error al obtener los puntos. Por favor, crea el índice compuesto en Firestore o contacta al administrador.');
+      }
+    }
+    console.error('Error al obtener los puntos:', error);
+    throw new Error(error instanceof Error ? error.message : 'Error al obtener los puntos');
+  }
+};
+
+/**
+ * Obtener todos los puntos con estado PENDIENTE (solo para administradores)
+ * @returns Lista de puntos pendientes ordenados por fecha de creación
+ */
+/**
+ * Obtener todos los puntos con estado PENDIENTE (solo para administradores)
+ * @returns Lista de puntos pendientes ordenados por fecha de creación
+ */
+export const getPendingPoints = async (): Promise<PointWithId[]> => {
+  try {
+    const q = query(
+      collection(db, 'punto'),
+      where('pointStatus', '==', 'PENDIENTE'),
+      orderBy('createdAt', 'desc')
+    );
+    const querySnapshot = await getDocs(q);
+    
+    // Mapear y filtrar solo puntos PENDIENTE (doble verificación)
+    const points = querySnapshot.docs
+      .map((doc) => ({
+        id: doc.id,
+        ...(doc.data() as PointData),
+      }))
+      .filter((point) => point.pointStatus === 'PENDIENTE'); // Filtro adicional en el cliente
+    
+    return points;
+  } catch (error) {
+    // Si el error es por falta de índice, intentar sin orderBy y ordenar en el cliente
+    if (error instanceof Error && error.message.includes('index')) {
+      try {
+        const q = query(
+          collection(db, 'punto'),
+          where('pointStatus', '==', 'PENDIENTE')
+        );
+        const querySnapshot = await getDocs(q);
+        
+        const points = querySnapshot.docs
+          .map((doc) => ({
+            id: doc.id,
+            ...(doc.data() as PointData),
+          }))
+          .filter((point) => point.pointStatus === 'PENDIENTE'); // Filtro adicional en el cliente
+        
+        // Ordenar por fecha de creación en el cliente (más recientes primero)
+        return points.sort((a, b) => {
+          const aTime = a.createdAt?.toMillis() || 0;
+          const bTime = b.createdAt?.toMillis() || 0;
+          return bTime - aTime;
+        });
+      } catch (fallbackError) {
+        console.error('Error al obtener puntos pendientes (fallback):', fallbackError);
+        throw new Error('Error al obtener puntos pendientes. Por favor, crea el índice compuesto en Firestore o contacta al administrador.');
+      }
+    }
+    console.error('Error al obtener puntos pendientes:', error);
+    throw new Error(error instanceof Error ? error.message : 'Error al obtener puntos pendientes');
   }
 };
 
@@ -241,9 +335,10 @@ export const getSavedPoints = async (): Promise<PointWithId[]> => {
 
     const points = await Promise.all(pointsPromises);
     
-    // Filtrar los nulls (puntos que ya no existen) y ordenar por fecha de creación
+    // Filtrar los nulls (puntos que ya no existen), solo puntos APROBADOS, y ordenar por fecha de creación
     return points
       .filter((point): point is PointWithId => point !== null)
+      .filter((point) => point.pointStatus === 'APROBADO') // Solo mostrar puntos aprobados
       .sort((a, b) => {
         const aTime = a.createdAt?.toMillis() || 0;
         const bTime = b.createdAt?.toMillis() || 0;
@@ -304,6 +399,54 @@ export const getMyPoints = async (): Promise<PointWithId[]> => {
     // Si es otro tipo de error, lanzarlo con más información
     console.error('Error al obtener mis puntos:', error);
     throw new Error(error instanceof Error ? error.message : 'Error al obtener mis puntos');
+  }
+};
+
+/**
+ * Actualizar el estado de un punto (solo para administradores)
+ * @param pointId - ID del punto a actualizar
+ * @param newStatus - Nuevo estado ('APROBADO' o 'RECHAZADO')
+ */
+export const updatePointStatus = async (pointId: string, newStatus: 'APROBADO' | 'RECHAZADO'): Promise<void> => {
+  const user = getCurrentUser();
+  
+  if (!user) {
+    throw new Error('Usuario no autenticado');
+  }
+
+  if (newStatus !== 'APROBADO' && newStatus !== 'RECHAZADO') {
+    throw new Error('El estado debe ser APROBADO o RECHAZADO');
+  }
+
+  try {
+    await updateDoc(doc(db, 'punto', pointId), {
+      pointStatus: newStatus,
+    });
+  } catch (error) {
+    console.error('Error al actualizar el estado del punto:', error);
+    throw new Error('Error al actualizar el estado del punto');
+  }
+};
+
+/**
+ * Obtener información del usuario creador desde Firestore
+ * @param userId - ID del usuario
+ * @returns Información del usuario o null si no se encuentra
+ */
+export const getUserInfo = async (userId: string): Promise<{ email: string; displayName: string } | null> => {
+  try {
+    const userDoc = await getDoc(doc(db, 'users', userId));
+    if (userDoc.exists()) {
+      const data = userDoc.data();
+      return {
+        email: data.email || '',
+        displayName: data.displayName || '',
+      };
+    }
+    return null;
+  } catch (error) {
+    console.error('Error al obtener información del usuario:', error);
+    return null;
   }
 };
 

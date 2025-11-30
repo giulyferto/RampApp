@@ -2,6 +2,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
+import { getFunctions } from 'firebase/functions';
 
 // Configuración de Firebase
 // Reemplaza estos valores con los de tu proyecto Firebase
@@ -23,6 +24,7 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 // Inicializar Storage - Firebase SDK maneja automáticamente el bucket desde la config
 export const storage = getStorage(app);
+export const functions = getFunctions(app);
 
 export default app;
 

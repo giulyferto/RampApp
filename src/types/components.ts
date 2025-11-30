@@ -11,6 +11,7 @@ export interface MapboxMapProps {
   isFormOpen?: boolean;
   showOnlySavedPoints?: boolean;
   showOnlyMyPoints?: boolean;
+  showPendingPoints?: boolean;
   savedPointsRefreshKey?: number;
   mapRefreshKey?: number;
 }
@@ -24,6 +25,8 @@ export interface PointFormProps {
   onClose?: () => void;
   onFavoriteChanged?: () => void;
   onPointSaved?: () => void;
+  isAdminMode?: boolean;
+  onStatusUpdated?: () => void;
 }
 
 /**
@@ -47,8 +50,10 @@ export interface NavBarProps {
   onShowSavedPoints?: () => void;
   onShowAllPoints?: () => void;
   onShowMyPoints?: () => void;
+  onShowPendingPoints?: () => void;
   showOnlySavedPoints?: boolean;
   showOnlyMyPoints?: boolean;
+  showPendingPoints?: boolean;
 }
 
 /**
