@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { signInWithGoogle, logout, onAuthChange, getCurrentUser } from '../firebase/auth';
 import type { User } from 'firebase/auth';
 import logo from '../assets/LogoRampApp.svg';
@@ -9,6 +10,7 @@ import { useUserRole } from '../hooks/useUserRole';
 const NavBar = ({ onShowSavedPoints, onShowAllPoints, onShowMyPoints, onShowPendingPoints, showOnlySavedPoints = false, showOnlyMyPoints = false, showPendingPoints = false }: NavBarProps) => {
   const [user, setUser] = useState<User | null>(null);
   const { isAdmin } = useUserRole();
+  const location = useLocation();
 
   useEffect(() => {
     // Verificar si hay un usuario autenticado al cargar
@@ -59,15 +61,16 @@ const NavBar = ({ onShowSavedPoints, onShowAllPoints, onShowMyPoints, onShowPend
     }
   };
 
-  const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
-    e.preventDefault();
-  };
-
   const handleInicioClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
-    e.preventDefault();
-    if ((showOnlySavedPoints || showOnlyMyPoints || showPendingPoints) && onShowAllPoints) {
-      onShowAllPoints();
+    // Solo prevenir el comportamiento por defecto si estamos en la página de inicio
+    // y hay filtros activos que necesitamos resetear
+    if (location.pathname === '/') {
+      e.preventDefault();
+      if ((showOnlySavedPoints || showOnlyMyPoints || showPendingPoints) && onShowAllPoints) {
+        onShowAllPoints();
+      }
     }
+    // Si estamos en otra página (como /info-util), dejar que el Link navegue normalmente
   };
 
   const handlePendingPointsClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
@@ -88,15 +91,15 @@ const NavBar = ({ onShowSavedPoints, onShowAllPoints, onShowMyPoints, onShowPend
         </div>
         <ul className="navbar-menu">
           <li>
-            <a 
-              href="/" 
-              className={`navbar-link ${!showOnlySavedPoints && !showOnlyMyPoints && !showPendingPoints ? 'active' : ''}`}
+            <Link 
+              to="/" 
+              className={`navbar-link ${location.pathname === '/' && !showOnlySavedPoints && !showOnlyMyPoints && !showPendingPoints ? 'active' : ''}`}
               onClick={handleInicioClick}
             >
               Inicio
-            </a>
+            </Link>
           </li>
-          {user && (
+          {user && location.pathname === '/' && (
             <>
               <li>
                 <a 
@@ -129,7 +132,14 @@ const NavBar = ({ onShowSavedPoints, onShowAllPoints, onShowMyPoints, onShowPend
               )}
             </>
           )}
-          <li><a href="/" className="navbar-link" onClick={handleLinkClick}>Info útil</a></li>
+          <li>
+            <Link 
+              to="/info-util" 
+              className={`navbar-link ${location.pathname === '/info-util' ? 'active' : ''}`}
+            >
+              Info útil
+            </Link>
+          </li>
           {user ? (
             <li><a href="/" className="navbar-link" onClick={handleLogout}>Cerrar sesión</a></li>
           ) : (
