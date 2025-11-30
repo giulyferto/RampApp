@@ -79,12 +79,14 @@ const Home = () => {
   const handleShowSavedPoints = () => {
     setShowOnlySavedPoints(true)
     setShowOnlyMyPoints(false)
+    setShowPendingPoints(false)
     setSelectedPoint(null) // Cerrar el formulario si está abierto
   }
 
   const handleShowMyPoints = () => {
     setShowOnlyMyPoints(true)
     setShowOnlySavedPoints(false)
+    setShowPendingPoints(false)
     setSelectedPoint(null) // Cerrar el formulario si está abierto
   }
 
@@ -120,6 +122,7 @@ const Home = () => {
           isFormOpen={!!selectedPoint}
           showOnlySavedPoints={showOnlySavedPoints}
           showOnlyMyPoints={showOnlyMyPoints}
+          showPendingPoints={showPendingPoints}
           savedPointsRefreshKey={savedPointsRefreshKey}
           mapRefreshKey={mapRefreshKey}
         />

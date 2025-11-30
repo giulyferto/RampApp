@@ -14,7 +14,6 @@ import {
   Button,
   Alert,
   CircularProgress,
-  Snackbar,
 } from "@mui/material";
 import {
   Close as CloseIcon,
@@ -58,14 +57,12 @@ const PointForm = ({
   const [comments, setComments] = useState<string>(point.comments || "");
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [showSuccessSnackbar, setShowSuccessSnackbar] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
   const [isCheckingFavorite, setIsCheckingFavorite] = useState(false);
   const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
   const [creatorInfo, setCreatorInfo] = useState<{ email: string; displayName: string } | null>(null);
   const [isLoadingCreator, setIsLoadingCreator] = useState(false);
-  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
-  const [successMessage, setSuccessMessage] = useState<string>('');
+  const [updatingStatus, setUpdatingStatus] = useState<'APROBADO' | 'RECHAZADO' | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Determinar si el punto ya está guardado (tiene pointStatus)
@@ -100,6 +97,7 @@ const PointForm = ({
     setStatus(point.status || "");
     setComments(point.comments || "");
     setImageFile(null); // Resetear el archivo de imagen cuando cambia el punto
+    setUpdatingStatus(null); // Resetear el estado de actualización cuando cambia el punto
   }, [point.id, point.imageUrl, point.category, point.status, point.comments]);
 
   // Verificar si el punto está guardado en favoritos cuando está en modo read-only (solo si no es modo admin)
@@ -179,20 +177,16 @@ const PointForm = ({
         imageFile
       );
 
-      // Mostrar mensaje de éxito
-      setShowSuccessSnackbar(true);
-
       // Notificar que se guardó el punto
       if (onPointSaved) {
         onPointSaved();
       }
 
-      // Cerrar el formulario después de 2 segundos
-      setTimeout(() => {
-        if (onClose) {
-          onClose();
-        }
-      }, 2000);
+      // Cerrar el formulario después de guardar
+      if (onClose) {
+        onClose();
+      }
+
     } catch (error) {
       console.error("Error al guardar:", error);
       setSaveError(
@@ -268,44 +262,42 @@ const PointForm = ({
   };
 
   const handleUpdateStatus = async (newStatus: 'APROBADO' | 'RECHAZADO') => {
-    if (!point.id || isUpdatingStatus) return;
+    if (!point.id || updatingStatus !== null) return;
 
-    setIsUpdatingStatus(true);
+    setUpdatingStatus(newStatus);
     setSaveError(null);
 
     try {
       await updatePointStatus(point.id, newStatus);
-      setSuccessMessage(newStatus === 'APROBADO' ? 'Punto aprobado exitosamente' : 'Punto rechazado exitosamente');
-      setShowSuccessSnackbar(true);
       
       // Notificar que se actualizó el estado
       if (onStatusUpdated) {
         onStatusUpdated();
       }
 
-      // Cerrar el formulario después de 2 segundos
-      setTimeout(() => {
-        if (onClose) {
-          onClose();
-        }
-      }, 2000);
+      // Cerrar el formulario
+      if (onClose) {
+        onClose();
+      }
     } catch (error) {
       console.error('Error al actualizar estado:', error);
       setSaveError(
         error instanceof Error ? error.message : 'Error al actualizar el estado del punto'
       );
+      setUpdatingStatus(null); // Resetear solo en caso de error
     } finally {
-      setIsUpdatingStatus(false);
+      // No resetear aquí si fue exitoso, para que se vea el estado hasta que se cierre
+      // El estado se reseteará cuando se cierre el formulario o cambie el punto
     }
   };
 
   // Formatear fecha de creación
-  const formatDate = (timestamp: any): string => {
+  const formatDate = (timestamp: unknown): string => {
     if (!timestamp) return 'Fecha no disponible';
     try {
       // Si es un Timestamp de Firestore
-      if (timestamp && typeof timestamp.toDate === 'function') {
-        const date = timestamp.toDate();
+      if (timestamp && typeof timestamp === 'object' && 'toDate' in timestamp && typeof (timestamp as { toDate: () => Date }).toDate === 'function') {
+        const date = (timestamp as { toDate: () => Date }).toDate();
         return date.toLocaleDateString('es-ES', {
           year: 'numeric',
           month: 'long',
@@ -315,8 +307,8 @@ const PointForm = ({
         });
       }
       // Si es un objeto con toMillis
-      if (timestamp && typeof timestamp.toMillis === 'function') {
-        const date = new Date(timestamp.toMillis());
+      if (timestamp && typeof timestamp === 'object' && 'toMillis' in timestamp && typeof (timestamp as { toMillis: () => number }).toMillis === 'function') {
+        const date = new Date((timestamp as { toMillis: () => number }).toMillis());
         return date.toLocaleDateString('es-ES', {
           year: 'numeric',
           month: 'long',
@@ -343,8 +335,8 @@ const PointForm = ({
   };
 
   // Obtener createdAt del punto (puede venir como Point o PointWithId)
-  const getCreatedAt = (): any => {
-    const pointWithId = point as PointData & { createdAt?: any };
+  const getCreatedAt = (): unknown => {
+    const pointWithId = point as unknown as PointData & { createdAt?: unknown };
     return pointWithId.createdAt;
   };
 
@@ -502,21 +494,23 @@ const PointForm = ({
                     border: "1px solid #e0e0e0",
                   }}
                 />
-                <IconButton
-                  onClick={handleRemoveImage}
-                  sx={{
-                    position: "absolute",
-                    top: 8,
-                    right: 8,
-                    backgroundColor: "rgba(255, 255, 255, 0.9)",
-                    "&:hover": {
-                      backgroundColor: "rgba(255, 255, 255, 1)",
-                    },
-                  }}
-                  size="small"
-                >
-                  <DeleteIcon />
-                </IconButton>
+                {!isSavedPoint && (
+                  <IconButton
+                    onClick={handleRemoveImage}
+                    sx={{
+                      position: "absolute",
+                      top: 8,
+                      right: 8,
+                      backgroundColor: "rgba(255, 255, 255, 0.9)",
+                      "&:hover": {
+                        backgroundColor: "rgba(255, 255, 255, 1)",
+                      },
+                    }}
+                    size="small"
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                )}
               </Box>
             ) : (
               !isSavedPoint && (
@@ -648,49 +642,51 @@ const PointForm = ({
                 variant="contained"
                 color="error"
                 startIcon={
-                  isUpdatingStatus ? (
+                  updatingStatus === 'RECHAZADO' ? (
                     <CircularProgress size={20} color="inherit" />
                   ) : (
                     <CancelIcon />
                   )
                 }
                 onClick={() => handleUpdateStatus('RECHAZADO')}
-                disabled={isUpdatingStatus}
+                disabled={updatingStatus !== null}
                 sx={{
                   backgroundColor: "#ef4444",
                   "&:hover": {
                     backgroundColor: "#dc2626",
                   },
                   "&:disabled": {
-                    backgroundColor: "#9ca3af",
+                    backgroundColor: updatingStatus === 'RECHAZADO' ? "#ef4444" : "#9ca3af",
+                    opacity: updatingStatus === 'RECHAZADO' ? 0.7 : 1,
                   },
                 }}
               >
-                {isUpdatingStatus ? "Actualizando..." : "Rechazar"}
+                {updatingStatus === 'RECHAZADO' ? "Rechazando..." : "Rechazar"}
               </Button>
               <Button
                 variant="contained"
                 color="success"
                 startIcon={
-                  isUpdatingStatus ? (
+                  updatingStatus === 'APROBADO' ? (
                     <CircularProgress size={20} color="inherit" />
                   ) : (
                     <CheckCircleIcon />
                   )
                 }
                 onClick={() => handleUpdateStatus('APROBADO')}
-                disabled={isUpdatingStatus}
+                disabled={updatingStatus !== null}
                 sx={{
                   backgroundColor: "#10b981",
                   "&:hover": {
                     backgroundColor: "#059669",
                   },
                   "&:disabled": {
-                    backgroundColor: "#9ca3af",
+                    backgroundColor: updatingStatus === 'APROBADO' ? "#10b981" : "#9ca3af",
+                    opacity: updatingStatus === 'APROBADO' ? 0.7 : 1,
                   },
                 }}
               >
-                {isUpdatingStatus ? "Actualizando..." : "Aprobar"}
+                {updatingStatus === 'APROBADO' ? "Aprobando..." : "Aprobar"}
               </Button>
             </Box>
           )}
@@ -729,27 +725,6 @@ const PointForm = ({
         onClose={handleCancelDialog}
         onConfirm={handleConfirmDelete}
       />
-
-      <Snackbar
-        open={showSuccessSnackbar}
-        autoHideDuration={2000}
-        onClose={() => {
-          setShowSuccessSnackbar(false);
-          setSuccessMessage('');
-        }}
-        anchorOrigin={{ vertical: "top", horizontal: "center" }}
-      >
-        <Alert
-          onClose={() => {
-            setShowSuccessSnackbar(false);
-            setSuccessMessage('');
-          }}
-          severity="success"
-          sx={{ width: "100%" }}
-        >
-          {successMessage || 'Punto guardado exitosamente'}
-        </Alert>
-      </Snackbar>
     </Box>
   );
 };

@@ -11,6 +11,7 @@ export interface MapboxMapProps {
   isFormOpen?: boolean;
   showOnlySavedPoints?: boolean;
   showOnlyMyPoints?: boolean;
+  showPendingPoints?: boolean;
   savedPointsRefreshKey?: number;
   mapRefreshKey?: number;
 }

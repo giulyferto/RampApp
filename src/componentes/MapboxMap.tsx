@@ -4,10 +4,10 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import { onAuthChange, getCurrentUser } from "../firebase/auth";
 import type { User } from "firebase/auth";
 import { Tooltip, Button } from "@mui/material";
-import { getPoints, getSavedPoints, getMyPoints } from "../firebase/points";
+import { getPoints, getSavedPoints, getMyPoints, getPendingPoints } from "../firebase/points";
 import type { Point, MapboxMapProps } from "../types";
 
-const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = false, showOnlySavedPoints = false, showOnlyMyPoints = false, savedPointsRefreshKey, mapRefreshKey }: MapboxMapProps) => {
+const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = false, showOnlySavedPoints = false, showOnlyMyPoints = false, showPendingPoints = false, savedPointsRefreshKey, mapRefreshKey }: MapboxMapProps) => {
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
@@ -179,14 +179,17 @@ const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = f
       try {
         let pointsToLoad;
         
-        if (showOnlySavedPoints && user) {
+        if (showPendingPoints) {
+          // Cargar solo los puntos pendientes (modo administración)
+          pointsToLoad = await getPendingPoints();
+        } else if (showOnlySavedPoints && user) {
           // Cargar solo los puntos guardados del usuario
           pointsToLoad = await getSavedPoints();
         } else if (showOnlyMyPoints && user) {
           // Cargar solo los puntos creados por el usuario
           pointsToLoad = await getMyPoints();
         } else {
-          // Cargar todos los puntos
+          // Cargar todos los puntos aprobados (vista principal)
           pointsToLoad = await getPoints();
         }
 
@@ -219,7 +222,7 @@ const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = f
       mapRef.current.once("load", loadPoints);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showOnlySavedPoints, showOnlyMyPoints, user, savedPointsRefreshKey, mapRefreshKey]);
+  }, [showOnlySavedPoints, showOnlyMyPoints, showPendingPoints, user, savedPointsRefreshKey, mapRefreshKey]);
 
   // Exponer la función de eliminación
   useEffect(() => {
