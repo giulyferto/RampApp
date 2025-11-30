@@ -14,6 +14,8 @@ export interface MapboxMapProps {
   showPendingPoints?: boolean;
   savedPointsRefreshKey?: number;
   mapRefreshKey?: number;
+  selectedCategory?: string;
+  selectedStatus?: string;
 }
 
 /**
