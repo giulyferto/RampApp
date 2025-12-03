@@ -11,6 +11,7 @@ export enum PointCategory {
   SENALIZACION = 'SENALIZACION',
   PUERTA = 'PUERTA',
   TRANSPORTE = 'TRANSPORTE',
+  VEREDA = 'VEREDA',
   OTRO = 'OTRO',
 }
 
