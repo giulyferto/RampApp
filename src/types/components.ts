@@ -16,6 +16,7 @@ export interface MapboxMapProps {
   mapRefreshKey?: number;
   selectedCategory?: string;
   selectedStatus?: string;
+  selectedPoint?: Point | null;
 }
 
 /**

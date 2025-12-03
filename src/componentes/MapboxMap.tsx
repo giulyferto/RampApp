@@ -7,7 +7,7 @@ import { Tooltip, Button } from "@mui/material";
 import { getPoints, getSavedPoints, getMyPoints, getPendingPoints } from "../firebase/points";
 import type { Point, MapboxMapProps } from "../types";
 
-const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = false, showOnlySavedPoints = false, showOnlyMyPoints = false, showPendingPoints = false, savedPointsRefreshKey, mapRefreshKey, selectedCategory = '', selectedStatus = '' }: MapboxMapProps) => {
+const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = false, showOnlySavedPoints = false, showOnlyMyPoints = false, showPendingPoints = false, savedPointsRefreshKey, mapRefreshKey, selectedCategory = '', selectedStatus = '', selectedPoint = null }: MapboxMapProps) => {
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
@@ -296,6 +296,28 @@ const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = f
       }
     };
   }, [isAddingPoint, user, onPointAdded, addPointToMap]);
+
+  // Centrar el mapa cuando se selecciona un punto
+  useEffect(() => {
+    if (!mapRef.current || !selectedPoint) return;
+
+    // Esperar a que el mapa esté cargado
+    if (!mapRef.current.loaded()) {
+      mapRef.current.once("load", () => {
+        mapRef.current?.flyTo({
+          center: [selectedPoint.lng, selectedPoint.lat],
+          zoom: 15,
+          duration: 1000,
+        });
+      });
+    } else {
+      mapRef.current.flyTo({
+        center: [selectedPoint.lng, selectedPoint.lat],
+        zoom: 15,
+        duration: 1000,
+      });
+    }
+  }, [selectedPoint]);
 
   const handleAddPointClick = () => {
     if (user) {

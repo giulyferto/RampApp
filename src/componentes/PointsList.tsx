@@ -64,7 +64,7 @@ const PointsList = ({
 
 
   const handlePointClick = (pointData: PointWithId) => {
-    const point: Point = {
+    const point: Point & { createdAt?: unknown } = {
       id: pointData.id,
       lng: pointData.lng,
       lat: pointData.lat,
@@ -74,6 +74,7 @@ const PointsList = ({
       imageUrl: pointData.imageUrl,
       userId: pointData.userId,
       pointStatus: pointData.pointStatus,
+      createdAt: pointData.createdAt,
     };
     onPointClick(point);
   };

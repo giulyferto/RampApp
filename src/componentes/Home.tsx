@@ -263,6 +263,7 @@ const Home = () => {
           mapRefreshKey={mapRefreshKey}
           selectedCategory={selectedCategory}
           selectedStatus={selectedStatus}
+          selectedPoint={selectedPoint}
         />
         {showOnlySavedPoints && (
           <PointsList
