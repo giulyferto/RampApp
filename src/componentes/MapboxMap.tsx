@@ -12,6 +12,7 @@ const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = f
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
   const pointsMapRef = useRef<Map<string, mapboxgl.Marker>>(new Map());
+  const markerElementsRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const onPointUpdatedRef = useRef(onPointUpdated);
   const onPointAddedRef = useRef(onPointAdded);
   const [isAddingPoint, setIsAddingPoint] = useState(false);
@@ -98,6 +99,9 @@ const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = f
     // Agregar emoji de ubicación
     el.textContent = "📍";
 
+    // Guardar referencia al elemento del marcador
+    markerElementsRef.current.set(point.id, el);
+
     // Crear el marcador con offset para que el pin apunte correctamente
     const marker = new mapboxgl.Marker({
       element: el,
@@ -165,6 +169,7 @@ const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = f
 
     pointIdsToRemove.forEach((pointId) => {
       pointsMapRef.current.delete(pointId);
+      markerElementsRef.current.delete(pointId);
     });
   }, []);
 
@@ -223,6 +228,19 @@ const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = f
             addPointToMap(point, true); // true indica que es un punto guardado
           }
         });
+        
+        // Actualizar tamaños después de cargar los puntos
+        setTimeout(() => {
+          markerElementsRef.current.forEach((el, pointId) => {
+            if (selectedPoint && pointId === selectedPoint.id) {
+              el.style.fontSize = "48px";
+              el.style.transition = "font-size 0.3s ease";
+            } else {
+              el.style.fontSize = "32px";
+              el.style.transition = "font-size 0.3s ease";
+            }
+          });
+        }, 100);
       } catch (error) {
         console.error("Error al cargar puntos:", error);
       }
@@ -249,6 +267,7 @@ const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = f
       if (marker) {
         marker.remove();
         pointsMapRef.current.delete(pointId);
+        markerElementsRef.current.delete(pointId);
         // Remover del registro de puntos nuevos también
         newPointsRef.current.delete(pointId);
         // Remover del array de marcadores también
@@ -297,25 +316,41 @@ const MapboxMap = ({ onPointAdded, onRemovePoint, onPointUpdated, isFormOpen = f
     };
   }, [isAddingPoint, user, onPointAdded, addPointToMap]);
 
-  // Centrar el mapa cuando se selecciona un punto
+  // Centrar el mapa y actualizar tamaño cuando se selecciona un punto
   useEffect(() => {
-    if (!mapRef.current || !selectedPoint) return;
+    if (!mapRef.current) return;
 
-    // Esperar a que el mapa esté cargado
-    if (!mapRef.current.loaded()) {
-      mapRef.current.once("load", () => {
-        mapRef.current?.flyTo({
+    // Actualizar tamaño de todos los marcadores
+    markerElementsRef.current.forEach((el, pointId) => {
+      if (selectedPoint && pointId === selectedPoint.id) {
+        // Punto seleccionado: tamaño más grande
+        el.style.fontSize = "48px";
+        el.style.transition = "font-size 0.3s ease";
+      } else {
+        // Punto no seleccionado: tamaño normal
+        el.style.fontSize = "32px";
+        el.style.transition = "font-size 0.3s ease";
+      }
+    });
+
+    // Centrar el mapa si hay un punto seleccionado
+    if (selectedPoint) {
+      // Esperar a que el mapa esté cargado
+      if (!mapRef.current.loaded()) {
+        mapRef.current.once("load", () => {
+          mapRef.current?.flyTo({
+            center: [selectedPoint.lng, selectedPoint.lat],
+            zoom: 15,
+            duration: 1000,
+          });
+        });
+      } else {
+        mapRef.current.flyTo({
           center: [selectedPoint.lng, selectedPoint.lat],
           zoom: 15,
           duration: 1000,
         });
-      });
-    } else {
-      mapRef.current.flyTo({
-        center: [selectedPoint.lng, selectedPoint.lat],
-        zoom: 15,
-        duration: 1000,
-      });
+      }
     }
   }, [selectedPoint]);
 
