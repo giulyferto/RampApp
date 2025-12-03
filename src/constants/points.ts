@@ -1,4 +1,4 @@
-import type { PointCategory, PointStatus, PointDocumentStatus } from '../types';
+import type { PointCategory, PointStatus } from '../types';
 
 /**
  * Opciones de categorías con sus etiquetas en español
@@ -11,6 +11,7 @@ export const CATEGORY_OPTIONS: Array<{ value: PointCategory | string; label: str
   { value: 'SENALIZACION', label: 'Señalización' },
   { value: 'PUERTA', label: 'Puerta' },
   { value: 'TRANSPORTE', label: 'Transporte' },
+  { value: 'VEREDA', label: 'Vereda' },
   { value: 'OTRO', label: 'Otro' },
 ];
 
@@ -38,6 +39,7 @@ export const CATEGORY_LABELS: Record<string, string> = {
   SENALIZACION: 'Señalización',
   PUERTA: 'Puerta',
   TRANSPORTE: 'Transporte',
+  VEREDA: 'Vereda',
   OTRO: 'Otro',
 };
 

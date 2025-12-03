@@ -5,7 +5,7 @@ import PointForm from './PointForm'
 import PointsList from './PointsList'
 import { getSavedPoints, getMyPoints, getPendingPoints } from '../firebase/points'
 import { Bookmark as BookmarkIcon, Person as PersonIcon, PendingActions as PendingIcon, FilterList as FilterIcon } from '@mui/icons-material'
-import { Select, MenuItem, FormControl, InputLabel, Box, Paper, IconButton, Tooltip } from '@mui/material'
+import { Select, MenuItem, FormControl, InputLabel, Box, Paper, IconButton, Tooltip, Snackbar, Alert } from '@mui/material'
 import type { Point } from '../types'
 import { CATEGORY_OPTIONS, STATUS_OPTIONS } from '../constants/points'
 import './Home.css'
@@ -21,6 +21,7 @@ const Home = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>('')
   const [selectedStatus, setSelectedStatus] = useState<string>('')
   const [showFilters, setShowFilters] = useState(false)
+  const [showSuccessSnackbar, setShowSuccessSnackbar] = useState(false)
 
   const handlePointAdded = (point: Point) => {
     setSelectedPoint(point)
@@ -78,6 +79,8 @@ const Home = () => {
       handleRemovePoint(selectedPoint.id)
       // Forzar refresh del mapa para que cargue el punto guardado
       setMapRefreshKey(prev => prev + 1)
+      // Mostrar snackbar de éxito
+      setShowSuccessSnackbar(true)
     }
   }
 
@@ -263,6 +266,7 @@ const Home = () => {
           mapRefreshKey={mapRefreshKey}
           selectedCategory={selectedCategory}
           selectedStatus={selectedStatus}
+          selectedPoint={selectedPoint}
         />
         {showOnlySavedPoints && (
           <PointsList
@@ -311,6 +315,21 @@ const Home = () => {
           />
         )}
       </div>
+      <Snackbar
+        open={showSuccessSnackbar}
+        autoHideDuration={6000}
+        onClose={() => setShowSuccessSnackbar(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setShowSuccessSnackbar(false)}
+          severity="success"
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          El punto se ha creado con éxito y queda pendiente de aprobación de un administrador
+        </Alert>
+      </Snackbar>
     </div>
   )
 }

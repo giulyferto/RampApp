@@ -336,8 +336,9 @@ const PointForm = ({
 
   // Obtener createdAt del punto (puede venir como Point o PointWithId)
   const getCreatedAt = (): unknown => {
-    const pointWithId = point as unknown as PointData & { createdAt?: unknown };
-    return pointWithId.createdAt;
+    // Intentar acceder a createdAt de diferentes formas
+    const pointWithCreatedAt = point as unknown as { createdAt?: unknown };
+    return pointWithCreatedAt.createdAt;
   };
 
   return (
